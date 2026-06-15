@@ -10,6 +10,7 @@ import {
   Check, Calendar, RefreshCcw, Tag
 } from 'lucide-react';
 import { Funcionario, Cliente, Produto, CaixaDiario, MovimentacaoCaixa, Pedido } from '../types';
+import { formatPhoneForInputDisplay, cleanAndFormatPhoneForSave } from '../utils/phone';
 
 interface CashierViewProps {
   produtos: Produto[];
@@ -104,9 +105,11 @@ export default function CashierView({
 
   const filteredProducts = useMemo(() => {
     return produtos.filter(p => {
-      const matchesSearch = p.nome.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                            p.categoria.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCategory = selectedCategory === 'Todos' || p.categoria === selectedCategory;
+      const nomeSafe = p.nome || '';
+      const catSafe = p.categoria || '';
+      const matchesSearch = nomeSafe.toLowerCase().includes((searchTerm || '').toLowerCase()) || 
+                            catSafe.toLowerCase().includes((searchTerm || '').toLowerCase());
+      const matchesCategory = selectedCategory === 'Todos' || catSafe === selectedCategory;
       return matchesSearch && matchesCategory;
     });
   }, [produtos, searchTerm, selectedCategory]);
@@ -855,7 +858,7 @@ export default function CashierView({
                 }
                 const newId = onAddClientQuick({
                   nome: quickClientNome,
-                  telefone: quickClientTelefone,
+                  telefone: cleanAndFormatPhoneForSave(quickClientTelefone),
                   endereco: quickClientEndereco || 'Não informado',
                   referencia: quickClientReferencia || 'Não informado',
                   forma_pagamento_preferida: quickClientPaymentPref,
@@ -889,14 +892,17 @@ export default function CashierView({
 
               <div>
                 <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone / WhatsApp *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ex: (11) 99999-9999"
-                  value={quickClientTelefone}
-                  onChange={e => setQuickClientTelefone(formatBrazilPhone(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-slate-800 font-mono font-semibold focus:outline-indigo-500"
-                />
+                <div className="flex">
+                  <span className="inline-flex items-center gap-1.5 px-2 bg-slate-100 border border-r-0 border-slate-200 rounded-l-lg text-slate-500 font-mono text-[10px] select-none text-slate-800">🇧🇷 +55</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ex: (11) 99999-9999"
+                    value={quickClientTelefone}
+                    onChange={e => setQuickClientTelefone(formatPhoneForInputDisplay(e.target.value))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-r-lg px-3 py-2 text-slate-800 font-mono font-semibold focus:outline-indigo-500"
+                  />
+                </div>
               </div>
 
               <div>

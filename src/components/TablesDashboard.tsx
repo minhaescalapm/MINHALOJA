@@ -81,10 +81,12 @@ export default function TablesDashboard({
   // Handle autocomplete matching for launching products
   const matchingProducts = useMemo(() => {
     if (!launchSearch.trim()) return [];
-    return produtos.filter(p => 
-      p.nome.toLowerCase().includes(launchSearch.toLowerCase()) || 
-      p.categoria.toLowerCase().includes(launchSearch.toLowerCase())
-    );
+    return produtos.filter(p => {
+      const nomeSafe = p.nome || '';
+      const catSafe = p.categoria || '';
+      return nomeSafe.toLowerCase().includes(launchSearch.toLowerCase()) || 
+             catSafe.toLowerCase().includes(launchSearch.toLowerCase());
+    });
   }, [produtos, launchSearch]);
 
   // Aggregate current pending orders of the checkout table

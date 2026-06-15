@@ -55,11 +55,13 @@ export default function GarcomView({
 
   const filteredProducts = useMemo(() => {
     return produtos.filter(p => {
-      const matchesSearch = p.nome.toLowerCase().includes(productSearch.toLowerCase());
-      const matchesCategory = selectedCategory === 'Todos' || p.categoria === selectedCategory;
+      const nomeSafe = p.nome || '';
+      const catSafe = p.categoria || '';
+      const matchesSearch = nomeSafe.toLowerCase().includes(productSearch.toLowerCase());
+      const matchesCategory = selectedCategory === 'Todos' || catSafe === selectedCategory;
       return matchesSearch && matchesCategory;
     });
-  }, [p_value => produtos, productSearch, selectedCategory]);
+  }, [produtos, productSearch, selectedCategory]);
 
   // Handle entering a waiter account
   const handleLogin = (e: React.FormEvent) => {

@@ -286,7 +286,7 @@ export default function App() {
   };
 
   // Navigation Active Tab inside SaaS
-  const [currentTab, setCurrentTab] = useState<'caixa' | 'mesas' | 'delivery' | 'financial' | 'crud' | 'waiter' | 'produtos' | 'clientes' | 'estoque' | 'admin_saas' | 'database'>('caixa');
+  const [currentTab, setCurrentTab] = useState<'caixa' | 'mesas' | 'delivery' | 'financial' | 'crud' | 'waiter' | 'produtos' | 'clientes' | 'estoque' | 'admin_saas' | 'database' | 'funcionarios'>('caixa');
 
   // --- DYNAMIC MULTI-TENANT LOADER ---
   const loadTenantData = (tenantId: string) => {
@@ -1583,6 +1583,8 @@ export default function App() {
                       {[
                         { id: 'clientes', label: 'CLIENTES' },
                         { id: 'produtos', label: 'PRODUTOS' },
+                        { id: 'delivery', label: 'DELIVERY' },
+                        { id: 'funcionarios', label: 'FUNCIONÁRIOS' },
                         { id: 'financial', label: 'FINANCEIRO' },
                         { id: 'estoque', label: 'ESTOQUE' },
                       ].map(tabItem => {
@@ -1624,6 +1626,7 @@ export default function App() {
                   { id: 'caixa', label: 'PDV' },
                   { id: 'mesas', label: 'Mesas' },
                   { id: 'delivery', label: 'Deliv.' },
+                  { id: 'funcionarios', label: 'Func.' },
                   { id: 'waiter', label: 'Garçom' },
                   { id: 'financial', label: 'Finance' },
                   { id: 'crud', label: 'Cadastro' },
@@ -1747,6 +1750,8 @@ export default function App() {
                   clientes={clientes}
                   produtos={produtos}
                   funcionarios={funcionarios}
+                  valesComissoes={valesComissoes}
+                  onAddValeComissao={handleAddValeComissao}
                   onUpdatePedidoStatus={handleUpdatePedidoStatus}
                   onDispatchDelivery={handleDispatchDelivery}
                   caixaDeliveryStatus={caixaDeliveryStatus}
@@ -1755,6 +1760,14 @@ export default function App() {
                   onOpenCaixaDelivery={handleOpenCaixaDelivery}
                   onCloseCaixaDelivery={handleCloseCaixaDelivery}
                   onAddDeliveryPedido={handleAddDeliveryPedido}
+                  onAddCliente={(c) => {
+                    const newC: Cliente = { ...c, id: `c-${Date.now()}`, data_cadastro: new Date().toISOString() };
+                    saveState('saas_clientes', [newC, ...clientes], setClientes);
+                  }}
+                  onAddProduto={(p) => {
+                    const newP: Produto = { ...p, id: `p-${Date.now()}` };
+                    saveState('saas_produtos', [newP, ...produtos], setProdutos);
+                  }}
                 />
               )}
 
@@ -1855,6 +1868,68 @@ export default function App() {
                   onUpdateProduto={(id, update) => {
                     const updated = produtos.map(p => p.id === id ? { ...p, ...update } : p);
                     saveState('saas_produtos', updated, setProdutos);
+                  }}
+                />
+              )}
+
+              {currentTab === 'funcionarios' && (
+                <RegistersCRUD
+                  clientes={clientes}
+                  produtos={produtos}
+                  funcionarios={funcionarios}
+                  fornecedores={fornecedores}
+                  initialSubTab="funcionarios"
+                  
+                  // Customers
+                  onAddCliente={(c) => {
+                    const newC: Cliente = { ...c, id: `c-${Date.now()}`, data_cadastro: new Date().toISOString() };
+                    saveState('saas_clientes', [newC, ...clientes], setClientes);
+                  }}
+                  onUpdateCliente={(id, update) => {
+                    const updated = clientes.map(c => c.id === id ? { ...c, ...update } : c);
+                    saveState('saas_clientes', updated, setClientes);
+                  }}
+                  onDeleteCliente={(id) => {
+                    saveState('saas_clientes', clientes.filter(c => c.id !== id), setClientes);
+                  }}
+
+                  // Products
+                  onAddProduto={(p) => {
+                    const newP: Produto = { ...p, id: `p-${Date.now()}` };
+                    saveState('saas_produtos', [newP, ...produtos], setProdutos);
+                  }}
+                  onUpdateProduto={(id, update) => {
+                    const updated = produtos.map(p => p.id === id ? { ...p, ...update } : p);
+                    saveState('saas_produtos', updated, setProdutos);
+                  }}
+                  onDeleteProduto={(id) => {
+                    saveState('saas_produtos', produtos.filter(p => p.id !== id), setProdutos);
+                  }}
+
+                  // Employees
+                  onAddFuncionario={(f) => {
+                    const newF: Funcionario = { ...f, id: `f-${Date.now()}`, data_cadastro: new Date().toISOString() };
+                    saveState('saas_funcionarios', [newF, ...funcionarios], setFuncionarios);
+                  }}
+                  onUpdateFuncionario={(id, update) => {
+                    const updated = funcionarios.map(f => f.id === id ? { ...f, ...update } : f);
+                    saveState('saas_funcionarios', updated, setFuncionarios);
+                  }}
+                  onDeleteFuncionario={(id) => {
+                    saveState('saas_funcionarios', funcionarios.filter(f => f.id !== id), setFuncionarios);
+                  }}
+
+                  // Suppliers
+                  onAddFornecedor={(f) => {
+                    const newF: Fornecedor = { ...f, id: `for-${Date.now()}` };
+                    saveState('saas_fornecedores', [newF, ...fornecedores], setFornecedores);
+                  }}
+                  onUpdateFornecedor={(id, update) => {
+                    const updated = fornecedores.map(f => f.id === id ? { ...f, ...update } : f);
+                    saveState('saas_fornecedores', updated, setFornecedores);
+                  }}
+                  onDeleteFornecedor={(id) => {
+                    saveState('saas_fornecedores', fornecedores.filter(f => f.id !== id), setFornecedores);
                   }}
                 />
               )}

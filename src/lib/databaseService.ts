@@ -89,6 +89,113 @@ export const saveCloudState = async (tenantId: string, key: string, data: any) =
       } else {
         console.log(`[Supabase] Saved state ${key} in saas_store for ${tenantId}`);
       }
+
+      // 4. Row-by-Row Synchronization for relational tables in Postgres Supabase
+      // Wrapping with a separate try-catch so it won't crash main sync if schemas aren't ideal
+      try {
+        let tenantName = tenantId;
+        try {
+          const savedConfig = localStorage.getItem(`saas_tenant_config_${tenantId}`);
+          if (savedConfig) {
+            tenantName = JSON.parse(savedConfig).name || tenantId;
+          }
+        } catch (e) {}
+
+        // Ensure tenant/company row exists to fulfill FK reference constraint
+        await supabase.from('empresas').upsert({
+          id: tenantId,
+          nome_empresa: tenantName,
+          nome_responsavel: 'Administrador SaaS',
+          telefone_admin: tenantId, // Unique phone for each company based on their SaaS ID
+          senha_hash: 'default',
+          status_assinatura: 'ativo',
+          data_fim_trial: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+        }, { onConflict: 'id' });
+
+        // Map and write products
+        if (key === 'saas_produtos' && Array.isArray(data)) {
+          const rows = data.map((p: any) => ({
+            id: p.id,
+            empresa_id: tenantId,
+            nome: p.nome,
+            categoria: p.categoria || 'Outros',
+            preco_venda: parseFloat(p.preco_venda) || 0,
+            preco_custo: parseFloat(p.preco_custo) || 0,
+            estoque_atual: parseFloat(p.estoque_atual) || 0,
+            estoque_minimo: parseFloat(p.estoque_minimo) || 0,
+            unidade_medida: p.unidade_medida || 'un'
+          }));
+          const { error: err } = await supabase.from('produtos').upsert(rows, { onConflict: 'id' });
+          if (err) console.warn('[Supabase] individual table products warning:', err.message);
+        }
+
+        // Map and write clients
+        if (key === 'saas_clientes' && Array.isArray(data)) {
+          const rows = data.map((c: any) => ({
+            id: c.id,
+            empresa_id: tenantId,
+            nome: c.nome,
+            telefone: c.telefone || '',
+            endereco: c.endereco || '',
+            limite_fiado: parseFloat(c.limite_fiado) || 0
+          }));
+          const { error: err } = await supabase.from('clientes').upsert(rows, { onConflict: 'id' });
+          if (err) console.warn('[Supabase] individual table clients warning:', err.message);
+        }
+
+        // Map and write employees (funcionarios)
+        if (key === 'saas_funcionarios' && Array.isArray(data)) {
+          const rows = data.map((f: any) => ({
+            id: f.id,
+            empresa_id: tenantId,
+            nome: f.nome,
+            cargo: f.cargo || 'garcom',
+            telefone: f.telefone || '',
+            comissao_percentual: parseFloat(f.comissao_percentual) || 0,
+            salario_base: parseFloat(f.salario_base) || 1200.00
+          }));
+          const { error: err } = await supabase.from('funcionarios').upsert(rows, { onConflict: 'id' });
+          if (err) console.warn('[Supabase] individual table employees warning:', err.message);
+        }
+
+        // Map and write suppliers (fornecedores)
+        if (key === 'saas_fornecedores' && Array.isArray(data)) {
+          const rows = data.map((f: any) => ({
+            id: f.id,
+            empresa_id: tenantId,
+            nome_empresa: f.nome_empresa,
+            contato: f.contato || '',
+            telefone: f.telefone || '',
+            cnpj_cpf: f.cnpj_cpf || ''
+          }));
+          const { error: err } = await supabase.from('fornecedores').upsert(rows, { onConflict: 'id' });
+          if (err) console.warn('[Supabase] individual table suppliers warning:', err.message);
+        }
+
+        // Map and write tables (mesas)
+        if (key === 'saas_mesas' && Array.isArray(data)) {
+          const rows = data.map((m: any) => {
+            let statusDb = m.status || 'livre';
+            if (statusDb === 'fechada') statusDb = 'fechamento';
+            if (statusDb === 'ocupada' || statusDb === 'refeicao') statusDb = 'ocupada';
+            if (!['livre', 'ocupada', 'preparo', 'fechamento'].includes(statusDb)) {
+              statusDb = 'livre';
+            }
+            return {
+              id: m.id,
+              empresa_id: tenantId,
+              numero_mesa: parseInt(m.numero_mesa) || 0,
+              status: statusDb,
+              total_atual: parseFloat(m.total_atual) || 0,
+              nome_personalized: m.nome_personalizado || null
+            };
+          });
+          const { error: err } = await supabase.from('mesas').upsert(rows, { onConflict: 'id' });
+          if (err) console.warn('[Supabase] individual table mesas warning:', err.message);
+        }
+      } catch (innerE: any) {
+        console.warn('[Supabase] relational row upsert ignored details:', innerE.message || innerE);
+      }
     } catch (e) {
       console.warn('[Supabase] Save exception:', e);
     }
@@ -102,32 +209,7 @@ export const saveCloudState = async (tenantId: string, key: string, data: any) =
 export const syncFromCloud = async (tenantId: string): Promise<{ [key: string]: any } | null> => {
   const syncedData: { [key: string]: any } = {};
 
-  // Flag to know if we obtained anything
-  let hasCloudData = false;
-
-  // Try Firebase Firestore (The default cloud-provisioned store)
-  try {
-    console.log(`[Firebase] Fetching data for tenant ${tenantId}...`);
-    for (const key of SYNC_KEYS) {
-      const docRef = doc(firestoreDb, 'saas_tenants', tenantId, 'collections', key);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const cloudData = docSnap.data().data;
-        syncedData[key] = cloudData;
-        const resolvedKey = getResolvedKey(tenantId, key);
-        localStorage.setItem(resolvedKey, JSON.stringify(cloudData));
-        hasCloudData = true;
-      }
-    }
-    if (hasCloudData) {
-      console.log(`[Firebase] Sync successfully completed for tenant ${tenantId}`);
-      return syncedData;
-    }
-  } catch (e) {
-    console.warn('[Firebase] Sync failed, dropping back to local storage cache:', e);
-  }
-
-  // Try Supabase (SaaS Multi-tenant JSON table backup)
+  // 1. Try Supabase FIRST (SaaS Multi-tenant JSON table backup) as primary if configured
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
@@ -149,6 +231,29 @@ export const syncFromCloud = async (tenantId: string): Promise<{ [key: string]: 
     } catch (e) {
       console.warn('[Supabase] Sync failed:', e);
     }
+  }
+
+  // 2. Try Firebase Firestore (The default cloud-provisioned store) as secondary backup
+  let hasCloudData = false;
+  try {
+    console.log(`[Firebase] Fetching data for tenant ${tenantId}...`);
+    for (const key of SYNC_KEYS) {
+      const docRef = doc(firestoreDb, 'saas_tenants', tenantId, 'collections', key);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const cloudData = docSnap.data().data;
+        syncedData[key] = cloudData;
+        const resolvedKey = getResolvedKey(tenantId, key);
+        localStorage.setItem(resolvedKey, JSON.stringify(cloudData));
+        hasCloudData = true;
+      }
+    }
+    if (hasCloudData) {
+      console.log(`[Firebase] Sync successfully completed for tenant ${tenantId}`);
+      return syncedData;
+    }
+  } catch (e) {
+    console.warn('[Firebase] Sync failed, dropping back to local storage cache:', e);
   }
 
   return null;

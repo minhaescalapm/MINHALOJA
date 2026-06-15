@@ -110,10 +110,12 @@ export default function StockManagement({
   };
 
   const filteredProdutos = useMemo(() => {
-    return produtos.filter(p => 
-      p.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.categoria.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    return produtos.filter(p => {
+      const nomeSafe = p.nome || '';
+      const catSafe = p.categoria || '';
+      return nomeSafe.toLowerCase().includes((searchQuery || '').toLowerCase()) ||
+             catSafe.toLowerCase().includes((searchQuery || '').toLowerCase());
+    });
   }, [produtos, searchQuery]);
 
   return (

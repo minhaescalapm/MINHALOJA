@@ -9,6 +9,7 @@ import {
   ContaAReceber, ValeEComissao, MovimentacaoCaixa, Pedido, Produto,
   HistoricoPagamentoFuncionario
 } from '../types';
+import { formatPhoneForInputDisplay, cleanAndFormatPhoneForSave } from '../utils/phone';
 
 interface FinancialDashboardProps {
   contasPagar: ContaAPagar[];
@@ -375,7 +376,7 @@ export default function FinancialDashboard({
     onAddFuncionario?.({
       nome: newFuncName.trim(),
       cargo: newFuncCargo,
-      telefone: newFuncTelefone.trim(),
+      telefone: cleanAndFormatPhoneForSave(newFuncTelefone),
       comissao_percentual: parseFloat(newFuncComissao) || 0,
       salario_base: parseFloat(newFuncSalario) || 1800,
       cep: newFuncCep,
@@ -408,7 +409,7 @@ export default function FinancialDashboard({
     onUpdateFuncionario?.(id, {
       nome: editFuncName.trim(),
       cargo: editFuncCargo,
-      telefone: editFuncTelefone.trim(),
+      telefone: cleanAndFormatPhoneForSave(editFuncTelefone),
       comissao_percentual: parseFloat(editFuncComissao) || 0,
       salario_base: parseFloat(editFuncSalario) || 1800,
       cep: editFuncCep,
@@ -888,14 +889,17 @@ export default function FinancialDashboard({
 
                     <div>
                       <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone Principal *</label>
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ex: (21) 99999-8888"
-                        value={newFuncTelefone}
-                        onChange={e => setNewFuncTelefone(e.target.value)}
-                        className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-slate-900 dark:text-white font-mono"
-                      />
+                      <div className="flex">
+                        <span className="inline-flex items-center gap-1.5 px-2 bg-slate-100 border border-r-0 border-slate-200 dark:border-slate-800 rounded-l-lg text-slate-500 font-mono text-[10px] select-none text-slate-800">🇧🇷 +55</span>
+                        <input
+                          type="text"
+                          required
+                          placeholder="Ex: (21) 99999-8888"
+                          value={newFuncTelefone}
+                          onChange={e => setNewFuncTelefone(formatPhoneForInputDisplay(e.target.value))}
+                          className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-r-lg px-3 py-2 text-slate-900 dark:text-white font-mono font-bold"
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -1078,12 +1082,15 @@ export default function FinancialDashboard({
                         </div>
                         <div>
                           <label className="text-[9px] uppercase font-black text-slate-400 block mb-1">Telefone / Contato</label>
-                          <input
-                            type="text"
-                            value={editFuncTelefone}
-                            onChange={e => setEditFuncTelefone(e.target.value)}
-                            className="w-full text-xs bg-slate-50 dark:bg-slate-955 border border-slate-200 dark:border-slate-800 rounded p-2 text-slate-800 dark:text-white font-mono"
-                          />
+                          <div className="flex">
+                            <span className="inline-flex items-center gap-1.5 px-2 bg-slate-100 border border-r-0 border-slate-200 dark:border-slate-800 rounded-l text-slate-500 font-mono text-[10px] select-none text-slate-800">🇧🇷 +55</span>
+                            <input
+                              type="text"
+                              value={editFuncTelefone}
+                              onChange={e => setEditFuncTelefone(formatPhoneForInputDisplay(e.target.value))}
+                              className="w-full text-xs bg-slate-50 dark:bg-slate-955 border border-slate-200 dark:border-slate-800 rounded-r p-2 text-slate-800 dark:text-white font-mono font-bold"
+                            />
+                          </div>
                         </div>
                         <div>
                           <label className="text-[9px] uppercase font-black text-slate-400 block mb-1">Salário Fixo R$</label>
@@ -1201,7 +1208,7 @@ export default function FinancialDashboard({
                               setEditingFuncionarioId(f.id);
                               setEditFuncName(f.nome);
                               setEditFuncCargo(f.cargo);
-                              setEditFuncTelefone(f.telefone || '');
+                              setEditFuncTelefone(formatPhoneForInputDisplay(f.telefone || ''));
                               setEditFuncSalario((f.salario_base || 1800).toString());
                               setEditFuncComissao((f.comissao_percentual || 0).toString());
                             }}

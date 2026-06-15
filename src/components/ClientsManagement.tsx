@@ -5,6 +5,7 @@ import {
   Clock, Award, ShoppingBag, X
 } from 'lucide-react';
 import { Cliente, Pedido, Produto } from '../types';
+import { formatPhoneForInputDisplay, cleanAndFormatPhoneForSave } from '../utils/phone';
 
 interface ClientsManagementProps {
   clientes: Cliente[];
@@ -95,7 +96,7 @@ export default function ClientsManagement({
     setEditingId(c.id);
     setIsInserting(false);
     setcNome(c.nome);
-    setcTel(c.telefone || '');
+    setcTel(formatPhoneForInputDisplay(c.telefone || ''));
     setcCep(c.cep || '');
     setcEnd(c.endereco || '');
     setcNumero(c.numero || '');
@@ -145,7 +146,7 @@ export default function ClientsManagement({
 
     const payload = {
       nome: cNome.trim(),
-      telefone: cTel.trim(),
+      telefone: cleanAndFormatPhoneForSave(cTel),
       cep: cCep.trim(),
       endereco: cEnd.trim(),
       numero: cNumero.trim(),
@@ -268,14 +269,17 @@ export default function ClientsManagement({
 
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone Principal *</label>
-                  <input 
-                    type="text" 
-                    required
-                    placeholder="Ex: (11) 99999-8888" 
-                    value={cTel} 
-                    onChange={e => setcTel(e.target.value)} 
-                    className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:text-white" 
-                  />
+                  <div className="flex">
+                    <span className="inline-flex items-center gap-1.5 px-2 bg-slate-100 border border-r-0 border-slate-200 dark:border-slate-800 rounded-l-lg text-slate-500 font-mono text-[10px] select-none text-slate-800 dark:text-slate-300">🇧🇷 +55</span>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="Ex: (11) 99999-8888" 
+                      value={cTel} 
+                      onChange={e => setcTel(formatPhoneForInputDisplay(e.target.value))} 
+                      className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-r-lg px-3 py-2 focus:ring-1 focus:ring-indigo-500 focus:outline-none dark:text-white font-bold font-mono" 
+                    />
+                  </div>
                 </div>
 
                 {/* CEP field initiates the autofill rule */}

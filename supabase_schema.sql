@@ -42,6 +42,17 @@ DROP TABLE IF EXISTS empresas CASCADE;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ==========================================
+-- 0. TABELA EXTRA DE AUDITORIA E BACKUP EXPRESSO
+-- ==========================================
+CREATE TABLE IF NOT EXISTS saas_store (
+    tenant_id VARCHAR(255) NOT NULL,
+    key_name VARCHAR(255) NOT NULL,
+    value_data JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT pk_saas_store PRIMARY KEY (tenant_id, key_name)
+);
+
+-- ==========================================
 -- 1. TABELA DE EMPRESAS (SaaS Tenants)
 -- ==========================================
 CREATE TABLE empresas (

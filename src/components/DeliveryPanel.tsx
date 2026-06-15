@@ -9,13 +9,16 @@ import {
   PlusCircle, Search, Sparkles, Coins, Trash2, Plus, Minus,
   DollarSign, AlertTriangle, Check
 } from 'lucide-react';
-import { Pedido, Cliente, Produto, Funcionario } from '../types';
+import { Pedido, Cliente, Produto, Funcionario, ValeEComissao } from '../types';
+import { formatPhoneForInputDisplay, cleanAndFormatPhoneForSave } from '../utils/phone';
 
 interface DeliveryPanelProps {
   pedidos: Pedido[];
   clientes: Cliente[];
   produtos: Produto[];
   funcionarios: Funcionario[];
+  valesComissoes?: ValeEComissao[];
+  onAddValeComissao?: (vc: Omit<ValeEComissao, 'id' | 'data'>) => void;
   onUpdatePedidoStatus: (pedidoId: string, status: Pedido['status']) => void;
   onDispatchDelivery: (pedidoId: string, driverName: string) => void;
   
@@ -26,6 +29,10 @@ interface DeliveryPanelProps {
   onOpenCaixaDelivery: (valorInicial: number) => void;
   onCloseCaixaDelivery: () => void;
   onAddDeliveryPedido: (clienteId: string, items: { produtoId: string; quantidade: number }[]) => void;
+  
+  // Quick Creators
+  onAddCliente?: (cliente: Omit<Cliente, 'id' | 'data_cadastro'>) => void;
+  onAddProduto?: (produto: Omit<Produto, 'id'>) => void;
 }
 
 export default function DeliveryPanel({
@@ -33,6 +40,8 @@ export default function DeliveryPanel({
   clientes,
   produtos,
   funcionarios,
+  valesComissoes = [],
+  onAddValeComissao,
   onUpdatePedidoStatus,
   onDispatchDelivery,
   caixaDeliveryStatus,
@@ -41,9 +50,52 @@ export default function DeliveryPanel({
   onOpenCaixaDelivery,
   onCloseCaixaDelivery,
   onAddDeliveryPedido,
+  onAddCliente,
+  onAddProduto,
 }: DeliveryPanelProps) {
   // Navigation between list of orders and creating a new order
   const [activeSubTab, setActiveSubTab] = useState<'entregas' | 'novo_pedido'>('entregas');
+
+  // Categories suggestions compiler
+  const uniqueCategories = useMemo(() => {
+    const list = new Set<string>();
+    ['Pastéis', 'Bebidas', 'Acompanhamentos', 'Sobremesas', 'Outros'].forEach(c => list.add(c));
+    produtos.forEach(p => {
+      if (p.categoria) list.add(p.categoria);
+    });
+    return Array.from(list);
+  }, [produtos]);
+
+  // Motoboy statistics compiler (current calendar month)
+  const getMotoboyMonthStats = (driverName: string, comissaoPercent: number) => {
+    const currentMonthNum = new Date().getMonth();
+    const currentYearNum = new Date().getFullYear();
+
+    const monthPedidos = pedidos.filter(p => {
+      if (p.tipo_pedido !== 'entrega') return false;
+      if (p.driver_name !== driverName) return false;
+      if (p.status !== 'concluido' && p.status !== 'entregue') return false;
+      
+      const pDate = new Date(p.id.startsWith('ped-') ? parseInt(p.id.replace('ped-', '')) || Date.now() : Date.now());
+      return pDate.getMonth() === currentMonthNum && pDate.getFullYear() === currentYearNum;
+    });
+
+    const deliveriesCount = monthPedidos.length;
+    
+    // total value of items + typical delivery fees
+    const totalValue = monthPedidos.reduce((sum, p) => {
+      const orderTotal = p.itens?.reduce((s, it) => s + it.subtotal, 0) || 0;
+      return sum + orderTotal + 5.0; // 5.0 delivery fee
+    }, 0);
+
+    // commission percentage calculated on item subtotal or absolute total
+    const commissionToReceive = monthPedidos.reduce((sum, p) => {
+      const orderTotal = p.itens?.reduce((s, it) => s + it.subtotal, 0) || 0;
+      return sum + (orderTotal * (comissaoPercent / 100));
+    }, 0);
+
+    return { deliveriesCount, totalValue, commissionToReceive };
+  };
   
   // Status filter for current deliveries list
   const [filterStatus, setFilterStatus] = useState<string>('Todos');
@@ -62,6 +114,168 @@ export default function DeliveryPanel({
   const [selectedClientId, setSelectedClientId] = useState<string>('');
   const [productSearch, setProductSearch] = useState<string>('');
   const [cart, setCart] = useState<{ produto: Produto; quantidade: number }[]>([]);
+
+  // --- QUICK REGISTRATION FORM STATES ---
+  const [showQuickClientForm, setShowQuickClientForm] = useState(false);
+  const [qcNome, setQcNome] = useState('');
+  const [qcTelefone, setQcTelefone] = useState('');
+  const [qcCep, setQcCep] = useState('');
+  const [qcRua, setQcRua] = useState('');
+  const [qcNumero, setQcNumero] = useState('');
+  const [qcBairro, setQcBairro] = useState('');
+  const [qcCidade, setQcCidade] = useState('');
+  const [qcReferencia, setQcReferencia] = useState('');
+  const [qcLoadingCep, setQcLoadingCep] = useState(false);
+  const [qcCepSuccess, setQcCepSuccess] = useState(false);
+
+  // Quick Product state
+  const [showQuickProductForm, setShowQuickProductForm] = useState(false);
+  const [qpNome, setQpNome] = useState('');
+  const [qpCategoria, setQpCategoria] = useState('Pastéis');
+  const [qpPrecoVenda, setQpPrecoVenda] = useState('');
+  const [qpPrecoCusto, setQpPrecoCusto] = useState('');
+  const [qpEstoqueAtual, setQpEstoqueAtual] = useState('50');
+  const [qpEstoqueMinimo, setQpEstoqueMinimo] = useState('5');
+  const [qpUnidadeMedida, setQpUnidadeMedida] = useState('un');
+
+  // Automatic select trackers
+  const [prevClientesLength, setPrevClientesLength] = useState(clientes.length);
+  const [autoAddProductName, setAutoAddProductName] = useState<string | null>(null);
+  const [prevProdutosLength, setPrevProdutosLength] = useState(produtos.length);
+
+  // Auto-look up CEP for quick register form
+  React.useEffect(() => {
+    const cleanCep = qcCep.replace(/\D/g, '');
+    if (cleanCep.length === 8) {
+      setQcLoadingCep(true);
+      setQcCepSuccess(false);
+      fetch(`https://viacep.com.br/ws/${cleanCep}/json/`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.erro) {
+            setQcRua(data.logradouro || '');
+            setQcBairro(data.bairro || '');
+            setQcCidade(`${data.localidade || ''} - ${data.uf || ''}`);
+            setQcCepSuccess(true);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          setQcLoadingCep(false);
+        });
+    }
+  }, [qcCep]);
+
+  // Hook to auto-select client after registration
+  React.useEffect(() => {
+    if (clientes.length > prevClientesLength) {
+      const newestClient = [...clientes].sort((a, b) => b.data_cadastro.localeCompare(a.data_cadastro))[0];
+      if (newestClient) {
+        setSelectedClientId(newestClient.id);
+        setClientSearch(newestClient.nome);
+      }
+    }
+    setPrevClientesLength(clientes.length);
+  }, [clientes, prevClientesLength]);
+
+  // Hook to auto-add product after registration
+  React.useEffect(() => {
+    if (produtos.length > prevProdutosLength && autoAddProductName) {
+      const matched = produtos.find(p => p.nome === autoAddProductName);
+      if (matched) {
+        handleAddToCart(matched);
+        setAutoAddProductName(null);
+      }
+    }
+    setPrevProdutosLength(produtos.length);
+  }, [produtos, prevProdutosLength, autoAddProductName]);
+
+  const handleQuickClientSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!qcNome.trim()) {
+      alert("Por favor, digite o Nome Completo do cliente!");
+      return;
+    }
+    if (!qcTelefone.trim()) {
+      alert("Por favor, digite o Telefone do cliente!");
+      return;
+    }
+    if (!qcRua.trim() || !qcNumero.trim() || !qcBairro.trim() || !qcCidade.trim()) {
+      alert("Os campos de endereço (Rua, Número, Bairro e Cidade) são obrigatórios para a entrega!");
+      return;
+    }
+
+    const fullAddress = `${qcRua}, ${qcNumero} - ${qcBairro}, ${qcCidade}`;
+
+    if (onAddCliente) {
+      onAddCliente({
+        nome: qcNome.trim(),
+        telefone: cleanAndFormatPhoneForSave(qcTelefone),
+        endereco: fullAddress,
+        referencia: qcReferencia.trim() || undefined,
+        forma_pagamento_preferida: 'dinheiro',
+        limite_fiado: 0,
+        cep: qcCep.trim() || undefined,
+        numero: qcNumero.trim() || undefined,
+        bairro: qcBairro.trim() || undefined,
+        cidade: qcCidade.trim() || undefined
+      });
+
+      setQcNome('');
+      setQcTelefone('');
+      setQcCep('');
+      setQcRua('');
+      setQcNumero('');
+      setQcBairro('');
+      setQcCidade('');
+      setQcReferencia('');
+      setShowQuickClientForm(false);
+    } else {
+      alert("Função de cadastrar cliente não fornecida!");
+    }
+  };
+
+  const handleQuickProductSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!qpNome.trim()) {
+      alert("Por favor, digite o Nome do Produto!");
+      return;
+    }
+    const sellPrice = parseFloat(qpPrecoVenda);
+    if (isNaN(sellPrice) || sellPrice <= 0) {
+      alert("Por favor, digite um Preço de Venda válido!");
+      return;
+    }
+
+    const costPrice = parseFloat(qpPrecoCusto) || 0;
+    const stockCurrent = parseFloat(qpEstoqueAtual) || 50;
+    const stockMin = parseFloat(qpEstoqueMinimo) || 5;
+
+    if (onAddProduto) {
+      onAddProduto({
+        nome: qpNome.trim(),
+        categoria: qpCategoria,
+        preco_venda: sellPrice,
+        preco_custo: costPrice,
+        estoque_atual: stockCurrent,
+        estoque_minimo: stockMin,
+        unidade_medida: qpUnidadeMedida.trim() || 'un'
+      });
+
+      setAutoAddProductName(qpNome.trim());
+
+      setQpNome('');
+      setQpCategoria('Pastéis');
+      setQpPrecoVenda('');
+      setQpPrecoCusto('');
+      setQpEstoqueAtual('50');
+      setQpEstoqueMinimo('5');
+      setQpUnidadeMedida('un');
+      setShowQuickProductForm(false);
+    } else {
+      alert("Função de cadastrar produto não fornecida!");
+    }
+  };
 
   // Calculate totals currently in Delivery Drawer
   const totalInDrawer = caixaDeliveryValorInicial + caixaDeliveryVendasConcluidas;
@@ -103,10 +317,12 @@ export default function DeliveryPanel({
 
   const filteredCartProducts = useMemo(() => {
     if (!productSearch) return produtos.slice(0, 5); // show first 5 products initially
-    return produtos.filter(p => 
-      p.nome.toLowerCase().includes(productSearch.toLowerCase()) ||
-      p.categoria.toLowerCase().includes(productSearch.toLowerCase())
-    );
+    return produtos.filter(p => {
+      const nomeSafe = p.nome || '';
+      const catSafe = p.categoria || '';
+      return nomeSafe.toLowerCase().includes(productSearch.toLowerCase()) ||
+             catSafe.toLowerCase().includes(productSearch.toLowerCase());
+    });
   }, [produtos, productSearch]);
 
   // Handle adding an item to the cart
@@ -353,7 +569,97 @@ export default function DeliveryPanel({
       {/* 3. SHIFT CONTENT ACCORDING TO PRIMARY SUBTABS */}
       {activeSubTab === 'entregas' ? (
         /* DISPATCH AND QUEUE DASHBOARD */
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-6">
+          {/* PAINEL CONSOLIDADO DE ENTREGADORES */}
+          <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 md:p-5 space-y-4 shadow-3xs animate-fadeIn">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <Truck className="w-4 h-4 text-indigo-600 dark:text-emerald-400" />
+                <h4 className="text-xs font-black uppercase text-slate-700 dark:text-slate-350 tracking-wider">
+                  Desempenho Consolidador de Entregas (Mês Atual)
+                </h4>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-805 px-2 py-0.5 rounded font-mono uppercase">
+                Mês {new Date().getMonth() + 1}/{new Date().getFullYear()}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {funcionarios.map(f => {
+                const stats = getMotoboyMonthStats(f.nome, f.comissao_percentual || 0);
+                
+                // Check if already credited for this month in the employee account (RH ledger)
+                const monthKey = `Mês ${new Date().getMonth() + 1}/${new Date().getFullYear()}`;
+                const hasCredited = valesComissoes && valesComissoes.some(
+                  vc => vc.funcionario_id === f.id && vc.tipo === 'comissao' && vc.descricao?.includes(monthKey)
+                );
+
+                return (
+                  <div 
+                    key={f.id} 
+                    className="bg-white dark:bg-slate-950 p-3.5 border border-slate-150 dark:border-slate-850 rounded-lg flex flex-col justify-between space-y-3 shadow-3xs hover:border-indigo-120 dark:hover:border-slate-700 transition-colors"
+                  >
+                    <div>
+                      <h5 className="text-xs font-extrabold text-slate-800 dark:text-slate-200 truncate">{f.nome}</h5>
+                      <span className="text-[9px] text-indigo-600 dark:text-emerald-400 font-bold uppercase font-sans tracking-wide">
+                        Sua Comissão: {f.comissao_percentual || 0}%
+                      </span>
+                      
+                      <div className="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t border-dashed border-slate-100 dark:border-slate-850 text-center font-mono">
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-slate-400 block leading-none mb-1">Entregas</span>
+                          <span className="text-xs font-extrabold text-slate-800 dark:text-slate-300">{stats.deliveriesCount}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-slate-400 block leading-none mb-1">Vol. Total</span>
+                          <span className="text-xs font-extrabold text-slate-800 dark:text-slate-300">R$ {stats.totalValue.toFixed(2)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] uppercase font-bold text-slate-400 block leading-none mb-1">Comissão</span>
+                          <span className="text-xs font-extrabold text-emerald-600 dark:text-emerald-400">R$ {stats.commissionToReceive.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-50 dark:border-slate-900 flex justify-center">
+                      {hasCredited ? (
+                        <div className="w-full text-center py-1 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200/50 dark:border-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[10px] font-black rounded-md flex items-center justify-center gap-1">
+                          <Check className="w-3 h-3 stroke-[3]" />
+                          <span>Adicionado p/ Conta!</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            if (!onAddValeComissao) return;
+                            onAddValeComissao({
+                              funcionario_id: f.id,
+                              tipo: 'comissao',
+                              valor: stats.commissionToReceive,
+                              status: 'pendente',
+                              descricao: `Comissão Consolidada Delivery - ${f.nome} - Mês ${new Date().getMonth() + 1}/${new Date().getFullYear()}`
+                            });
+                            alert(`Acabamos de creditar R$ ${stats.commissionToReceive.toFixed(2)} direto na conta de ${f.nome}!`);
+                          }}
+                          disabled={stats.commissionToReceive <= 0}
+                          className="w-full py-1 px-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-100 dark:disabled:bg-slate-800/20 disabled:text-slate-400 font-extrabold text-[10px] text-white rounded transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <DollarSign className="w-3 h-3" />
+                          <span>Creditar R$ {stats.commissionToReceive.toFixed(2)} na Conta</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {funcionarios.length === 0 && (
+                <p className="col-span-full text-center py-4 text-xs font-bold text-slate-400">
+                  Nenhum funcionário cadastrado no momento para consolidação.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filteredDeliveries.map(p => {
             const client = clientes.find(c => c.id === p.cliente_id);
             const orderTotal = p.itens?.reduce((sum, item) => sum + item.subtotal, 0) || 0;
@@ -571,6 +877,7 @@ export default function DeliveryPanel({
               <p className="text-[10px] text-slate-400 mt-1">Sempre que uma venda de Delivery é gerada, ela aparece neste painel de despacho.</p>
             </div>
           )}
+          </div>
         </div>
       ) : (
         /* NEW DELIVERY ORDER LAUNCH SECTION */
@@ -612,6 +919,150 @@ export default function DeliveryPanel({
                       />
                     </div>
                   </div>
+
+                  {/* Registration and Deselection button */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowQuickClientForm(!showQuickClientForm);
+                        setShowQuickProductForm(false);
+                      }}
+                      className="flex-1 py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] rounded-lg border border-indigo-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 animate-bounce" />
+                      <span>{showQuickClientForm ? 'Fechar Formulário' : 'Cadastrar Clientes'}</span>
+                    </button>
+                    {selectedClientId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedClientId('');
+                          setClientSearch('');
+                        }}
+                        className="py-1.5 px-3 bg-rose-50 hover:bg-rose-105 text-rose-700 font-extrabold text-[10px] rounded-lg border border-rose-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                        title="Remover cliente selecionado caso tenha colocado errado"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Excluir Seleção</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Client Form Display */}
+                  {showQuickClientForm && (
+                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3 shadow-inner animate-fadeIn">
+                       <span className="text-[10px] uppercase font-black text-indigo-900 tracking-wider flex items-center gap-1 border-b border-slate-200 pb-1">
+                         <User className="w-3.5 h-3.5" />
+                         Novos Clientes para Delivery
+                       </span>
+                       <div className="grid grid-cols-2 gap-2">
+                         <div>
+                           <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Nome Completo *</label>
+                           <input
+                             type="text"
+                             value={qcNome}
+                             onChange={e => setQcNome(e.target.value)}
+                             placeholder="Nome completo..."
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800"
+                           />
+                         </div>
+                         <div>
+                           <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Telefone *</label>
+                           <input
+                             type="text"
+                             value={qcTelefone}
+                             onChange={e => setQcTelefone(formatPhoneForInputDisplay(e.target.value))}
+                             placeholder="(11) 99999-9999"
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800 font-mono"
+                           />
+                         </div>
+                       </div>
+
+                       <div className="grid grid-cols-3 gap-2">
+                         <div>
+                           <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">CEP (Busca Auto)</label>
+                           <input
+                             type="text"
+                             value={qcCep}
+                             onChange={e => setQcCep(e.target.value)}
+                             placeholder="Ex: 01310100"
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800 font-mono"
+                           />
+                           {qcLoadingCep && (
+                             <span className="text-[8px] text-slate-400 block mt-0.5 animate-pulse">Consultando...</span>
+                           )}
+                           {qcCepSuccess && (
+                             <span className="text-[8px] text-emerald-600 font-bold block mt-0.5">Sucesso!</span>
+                           )}
+                         </div>
+                         <div className="col-span-2">
+                           <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Rua / Logradouro *</label>
+                           <input
+                             type="text"
+                             value={qcRua}
+                             onChange={e => setQcRua(e.target.value)}
+                             placeholder="Rua, Avenida, etc..."
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-100 text-slate-800"
+                           />
+                         </div>
+                       </div>
+
+                       <div className="grid grid-cols-3 gap-2">
+                         <div>
+                           <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Número *</label>
+                           <input
+                             type="text"
+                             value={qcNumero}
+                             onChange={e => setQcNumero(e.target.value)}
+                             placeholder="Número..."
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800"
+                           />
+                         </div>
+                         <div className="col-span-2">
+                           <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Bairro *</label>
+                           <input
+                             type="text"
+                             value={qcBairro}
+                             onChange={e => setQcBairro(e.target.value)}
+                             placeholder="Bairro..."
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800"
+                           />
+                         </div>
+                       </div>
+
+                       <div className="grid grid-cols-2 gap-2">
+                         <div>
+                           <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Cidade *</label>
+                           <input
+                             type="text"
+                             value={qcCidade}
+                             onChange={e => setQcCidade(e.target.value)}
+                             placeholder="Cidade - UF..."
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800"
+                           />
+                         </div>
+                         <div>
+                           <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Referência</label>
+                           <input
+                             type="text"
+                             value={qcReferencia}
+                             onChange={e => setQcReferencia(e.target.value)}
+                             placeholder="Ex: Próximo à praça"
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800"
+                           />
+                         </div>
+                       </div>
+
+                       <button
+                         type="button"
+                         onClick={handleQuickClientSubmit}
+                         className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all self-stretch text-center cursor-pointer"
+                       >
+                         Salvar e Conectar no Pedido
+                       </button>
+                     </div>
+                  )}
 
                   {/* Display Client List to select */}
                   {clientSearch && !selectedClientId && (
@@ -711,6 +1162,125 @@ export default function DeliveryPanel({
                     </div>
                   </div>
 
+                  {/* Toggle showQuickProductForm */}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowQuickProductForm(!showQuickProductForm);
+                        setShowQuickClientForm(false);
+                      }}
+                      className="w-full py-1.5 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] rounded-lg border border-indigo-200 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 animate-bounce" />
+                      <span>{showQuickProductForm ? 'Fechar Formulário' : 'Cadastrar Produtos'}</span>
+                    </button>
+                  </div>
+
+                  {/* Quick Product Form Display */}
+                  {showQuickProductForm && (
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3 shadow-inner animate-fadeIn">
+                      <span className="text-[10px] uppercase font-black text-indigo-900 tracking-wider flex items-center gap-1 border-b border-slate-200 pb-1">
+                        <Sparkles className="w-3.5 h-3.5 text-yellow-500" />
+                        Novo Produto no Cardápio
+                      </span>
+
+                      <div>
+                        <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1 font-sans">Nome do Produto *</label>
+                        <input
+                          type="text"
+                          value={qpNome}
+                          onChange={e => setQpNome(e.target.value)}
+                          placeholder="Ex: Pastel de Calabresa com Catupiry..."
+                          className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800 font-sans"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Categoria</label>
+                          <input type="text" list="qp-categories-datalist"
+                            value={qpCategoria}
+                            onChange={e => setQpCategoria(e.target.value)}
+                            className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800"
+                            placeholder="Digite ou selecione..."
+                          />
+                          <datalist id="qp-categories-datalist">
+                            {uniqueCategories.map(cat => (
+                              <option key={cat} value={cat} />
+                            ))}
+                          </datalist>
+                        </div>
+                        <div>
+                          <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Unidade</label>
+                          <input
+                            type="text"
+                            value={qpUnidadeMedida}
+                            onChange={e => setQpUnidadeMedida(e.target.value)}
+                            placeholder="Ex: un, kg, lt..."
+                            className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Preço Venda (R$) *</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={qpPrecoVenda}
+                            onChange={e => setQpPrecoVenda(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Preço Custo (R$)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={qpPrecoCusto}
+                            onChange={e => setQpPrecoCusto(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800 font-mono"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Estoque Inicial</label>
+                          <input
+                            type="number"
+                            value={qpEstoqueAtual}
+                            onChange={e => setQpEstoqueAtual(e.target.value)}
+                            placeholder="50"
+                            className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800 font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] uppercase font-bold text-slate-500 block mb-1">Estoque Mínimo</label>
+                           <input
+                             type="number"
+                             value={qpEstoqueMinimo}
+                             onChange={e => setQpEstoqueMinimo(e.target.value)}
+                             placeholder="5"
+                             className="w-full text-xs bg-white border border-slate-200 rounded-md p-1.5 focus:outline-none focus:border-indigo-500 text-slate-800 font-mono"
+                           />
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleQuickProductSubmit}
+                        className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[11px] rounded-xl shadow-md transition-all text-center cursor-pointer"
+                      >
+                        Salvar e Adicionar no Pedido
+                      </button>
+                    </div>
+                  )}
+
                   {/* Filtered list of products */}
                   <div className="grid grid-cols-1 gap-2 max-h-52 overflow-y-auto pr-1">
                     {filteredCartProducts.map(p => {
@@ -733,7 +1303,7 @@ export default function DeliveryPanel({
                             className={`px-2.5 py-1 text-[10px] font-black rounded-md text-white transition-all ${
                               isOutOfStock 
                                 ? 'bg-slate-300 cursor-not-allowed' 
-                                : 'bg-indigo-650 hover:bg-indigo-500 hover:scale-105 active:scale-95'
+                                : 'bg-indigo-600 hover:bg-indigo-500 hover:scale-105 active:scale-95'
                             }`}
                           >
                             {isOutOfStock ? 'Sem Estoque' : 'Adicionar'}
@@ -746,7 +1316,20 @@ export default function DeliveryPanel({
                   {/* Selected Cart Items view */}
                   <div className="border-t border-slate-150 pt-3 flex-1 min-h-[160px] flex flex-col justify-between">
                     <div>
-                      <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400 block mb-2">Cart / Itens Selecionados</span>
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-[9px] uppercase font-extrabold tracking-wider text-slate-400">Cart / Itens Selecionados</span>
+                        {cart.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setCart([])}
+                            className="text-[9px] text-rose-600 hover:text-rose-700 font-extrabold flex items-center gap-1 bg-rose-50 hover:bg-rose-100 px-2 py-0.5 rounded border border-rose-200 transition-colors cursor-pointer"
+                            title="Remover todos os itens selecionados caso tenha colocado errado"
+                          >
+                            <Trash2 className="w-2.5 h-2.5" />
+                            <span>Limpar Carrinho</span>
+                          </button>
+                        )}
+                      </div>
                       {cart.length === 0 ? (
                         <div className="text-center py-6 text-[10px] text-slate-400 font-bold border-2 border-dashed border-slate-200 rounded-lg">
                           Carrinho de Delivery Vazio
@@ -783,9 +1366,11 @@ export default function DeliveryPanel({
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveFromCart(item.produto.id)}
-                                  className="p-1 text-rose-500 hover:bg-rose-50 rounded"
+                                  className="p-1 px-2 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg flex items-center gap-1 transition-colors border border-rose-200/50"
+                                  title="Remover este item caso tenha adicionado errado"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
+                                  <span className="text-[9px] font-bold">Excluir</span>
                                 </button>
                               </div>
                             </div>

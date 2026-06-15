@@ -140,9 +140,11 @@ export default function ProductsRegistration({
   // Filter list of products
   const filteredProducts = useMemo(() => {
     return produtos.filter(p => {
-      const matchesSearch = p.nome.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            p.categoria.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = !categoryFilter || p.categoria === categoryFilter;
+      const pNomeSafe = p.nome || '';
+      const pCatSafe = p.categoria || '';
+      const matchesSearch = pNomeSafe.toLowerCase().includes((searchQuery || '').toLowerCase()) || 
+                            pCatSafe.toLowerCase().includes((searchQuery || '').toLowerCase());
+      const matchesCategory = !categoryFilter || pCatSafe === categoryFilter;
       return matchesSearch && matchesCategory;
     });
   }, [produtos, searchQuery, categoryFilter]);

@@ -3,18 +3,20 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Users, Tag, Truck, UserPlus, Briefcase, Search, PlusCircle, 
   Trash2, Edit, CheckCircle, Eye, AlertCircle, RefreshCcw, Loader2
 } from 'lucide-react';
 import { Cliente, Produto, Funcionario, Fornecedor } from '../types';
+import { formatPhoneForInputDisplay, cleanAndFormatPhoneForSave } from '../utils/phone';
 
 interface RegistersCRUDProps {
   clientes: Cliente[];
   produtos: Produto[];
   funcionarios: Funcionario[];
   fornecedores: Fornecedor[];
+  initialSubTab?: 'produtos' | 'clientes' | 'funcionarios' | 'fornecedores';
   onAddCliente: (c: Omit<Cliente, 'id' | 'data_cadastro'>) => void;
   onUpdateCliente: (id: string, c: Partial<Cliente>) => void;
   onDeleteCliente: (id: string) => void;
@@ -34,6 +36,7 @@ export default function RegistersCRUD({
   produtos,
   funcionarios,
   fornecedores,
+  initialSubTab,
   onAddCliente,
   onUpdateCliente,
   onDeleteCliente,
@@ -47,7 +50,13 @@ export default function RegistersCRUD({
   onUpdateFornecedor,
   onDeleteFornecedor,
 }: RegistersCRUDProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'produtos' | 'clientes' | 'funcionarios' | 'fornecedores'>('clientes');
+  const [activeSubTab, setActiveSubTab] = useState<'produtos' | 'clientes' | 'funcionarios' | 'fornecedores'>(initialSubTab || 'clientes');
+
+  useEffect(() => {
+    if (initialSubTab) {
+      setActiveSubTab(initialSubTab);
+    }
+  }, [initialSubTab]);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Editing state trackers
@@ -58,6 +67,15 @@ export default function RegistersCRUD({
   // Products
   const [pNome, setpNome] = useState('');
   const [pCat, setpCat] = useState('');
+
+  const uniqueCategories = useMemo(() => {
+    const list = new Set<string>();
+    ['Pastéis', 'Bebidas', 'Acompanhamentos', 'Sobremesas', 'Outros'].forEach(c => list.add(c));
+    produtos.forEach(p => {
+      if (p.categoria) list.add(p.categoria);
+    });
+    return Array.from(list);
+  }, [produtos]);
   const [pPrecoVenda, setpPrecoVenda] = useState('');
   const [pPrecoCusto, setpPrecoCusto] = useState('');
   const [pEstoque, setpEstoque] = useState('');
@@ -185,13 +203,13 @@ export default function RegistersCRUD({
       setpUnidade(item.unidade_medida);
     } else if (type === 'cliente') {
       setcNome(item.nome);
-      setcTel(item.telefone);
+      setcTel(formatPhoneForInputDisplay(item.telefone));
       setcEnd(item.endereco);
       setcLimite(item.limite_fiado.toString());
     } else if (type === 'funcionario') {
       setfNome(item.nome);
       setfCargo(item.cargo);
-      setfTel(item.telefone);
+      setfTel(formatPhoneForInputDisplay(item.telefone));
       setfComissao(item.comissao_percentual.toString());
       setfCep(item.cep || '');
       setfEnd(item.endereco || '');
@@ -201,7 +219,7 @@ export default function RegistersCRUD({
     } else if (type === 'fornecedor') {
       setforNome(item.nome_empresa);
       setforContato(item.contato || '');
-      setforTel(item.telefone || '');
+      setforTel(formatPhoneForInputDisplay(item.telefone || ''));
       setforCNPJ(item.cnpj_cpf);
       setforCep(item.cep || '');
       setforEnd(item.endereco || '');
@@ -234,7 +252,7 @@ export default function RegistersCRUD({
     } else if (activeSubTab === 'clientes') {
       const payload = {
         nome: cNome,
-        telefone: cTel,
+        telefone: cleanAndFormatPhoneForSave(cTel),
         endereco: cEnd,
         limite_fiado: parseFloat(cLimite) || 0
       };
@@ -249,7 +267,7 @@ export default function RegistersCRUD({
       const payload = {
         nome: fNome,
         cargo: fCargo,
-        telefone: fTel,
+        telefone: cleanAndFormatPhoneForSave(fTel),
         comissao_percentual: parseFloat(fComissao) || 0,
         cep: fCep,
         endereco: fEnd,
@@ -272,7 +290,7 @@ export default function RegistersCRUD({
       const payload = {
         nome_empresa: forNome,
         contato: forContato,
-        telefone: forTel,
+        telefone: cleanAndFormatPhoneForSave(forTel),
         cnpj_cpf: forCNPJ,
         cep: forCep,
         endereco: forEnd,
@@ -300,7 +318,12 @@ export default function RegistersCRUD({
   // Filter lists
   const filteredProducts = useMemo(() => {
     if (activeSubTab !== 'produtos') return [];
-    return produtos.filter(p => p.nome.toLowerCase().includes(searchQuery.toLowerCase()) || p.categoria.toLowerCase().includes(searchQuery.toLowerCase()));
+    return produtos.filter(p => {
+      const nomeSafe = p.nome || '';
+      const catSafe = p.categoria || '';
+      return nomeSafe.toLowerCase().includes((searchQuery || '').toLowerCase()) || 
+             catSafe.toLowerCase().includes((searchQuery || '').toLowerCase());
+    });
   }, [produtos, searchQuery, activeSubTab]);
 
   const filteredClientes = useMemo(() => {
@@ -406,7 +429,12 @@ export default function RegistersCRUD({
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Categoria</label>
-                  <input type="text" placeholder="Bebidas, Salgados, Outros" value={pCat} onChange={e => setpCat(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550" />
+                  <input type="text" list="crud-categories-datalist" placeholder="Bebidas, Salgados, Outros" value={pCat} onChange={e => setpCat(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550" />
+                  <datalist id="crud-categories-datalist">
+                    {uniqueCategories.map(cat => (
+                      <option key={cat} value={cat} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Unidade</label>
@@ -444,7 +472,10 @@ export default function RegistersCRUD({
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone / Whats</label>
-                  <input type="text" required placeholder="(11) 99999-0000" value={cTel} onChange={e => setcTel(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550" />
+                  <div className="flex">
+                    <span className="inline-flex items-center gap-1.5 px-2 bg-slate-100 border border-r-0 border-slate-200 rounded-l text-slate-500 font-mono text-[10px] select-none">🇧🇷 +55</span>
+                    <input type="text" required placeholder="(11) 99999-0000" value={cTel} onChange={e => setcTel(formatPhoneForInputDisplay(e.target.value))} className="w-full text-xs bg-white border border-slate-200 rounded-r px-2.5 py-1.5 focus:outline-indigo-550" />
+                  </div>
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Limite do Fiado (R$)</label>
@@ -474,7 +505,10 @@ export default function RegistersCRUD({
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone de Contato</label>
-                  <input type="text" required placeholder="(11) 99999-0000" value={fTel} onChange={e => setfTel(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 block w-full text-slate-800" />
+                  <div className="flex">
+                    <span className="inline-flex items-center gap-1.5 px-2 bg-slate-100 border border-r-0 border-slate-200 rounded-l text-slate-500 font-mono text-[10px] select-none text-slate-800">🇧🇷 +55</span>
+                    <input type="text" required placeholder="(11) 99999-0000" value={fTel} onChange={e => setfTel(formatPhoneForInputDisplay(e.target.value))} className="w-full text-xs bg-white border border-slate-200 rounded-r px-2.5 py-1.5 focus:outline-indigo-550 block w-full text-slate-800" />
+                  </div>
                 </div>
                 {fCargo === 'garcom' && (
                   <div>
@@ -528,7 +562,10 @@ export default function RegistersCRUD({
                 </div>
                 <div className="md:col-span-2">
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone de Vendas</label>
-                  <input type="text" placeholder="(11) 3322-1100" value={forTel} onChange={e => setforTel(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                  <div className="flex">
+                    <span className="inline-flex items-center gap-1.5 px-2 bg-slate-100 border border-r-0 border-slate-200 rounded-l text-slate-500 font-mono text-[10px] select-none text-slate-800">🇧🇷 +55</span>
+                    <input type="text" placeholder="(11) 3322-1100" value={forTel} onChange={e => setforTel(formatPhoneForInputDisplay(e.target.value))} className="w-full text-xs bg-white border border-slate-200 rounded-r px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                  </div>
                 </div>
                 <div className="md:col-span-4 border-t border-slate-105 pt-3">
                   <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 tracking-wider uppercase">🚚 Sede Comercial / Endereço</span>
