@@ -613,7 +613,7 @@ export default function CashierView({
               className={`w-full py-3.5 rounded-xl font-bold text-sm tracking-wide transition-all shadow-sm flex items-center justify-center gap-2 ${
                 cartItems.length === 0
                   ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-                  : 'bg-indigo-650 hover:bg-indigo-600 text-white hover:shadow-md'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white hover:shadow-md cursor-pointer'
               }`}
             >
               <Check className="w-4 h-4" />

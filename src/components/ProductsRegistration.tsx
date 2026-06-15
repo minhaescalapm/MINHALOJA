@@ -1,12 +1,7 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Tag, Search, PlusCircle, Trash2, Edit, Check, HelpCircle, 
-  TrendingUp, Activity, Package, AlertTriangle 
+  TrendingUp, Activity, Package, AlertTriangle, ArrowRight, Info
 } from 'lucide-react';
 import { Produto } from '../types';
 
@@ -34,10 +29,24 @@ export default function ProductsRegistration({
   const [pNome, setpNome] = useState('');
   const [pCat, setpCat] = useState('');
   const [pPrecoVenda, setpPrecoVenda] = useState('');
-  const [pPrecoCusto, setpPrecoCusto] = useState('');
+  const [pPrecoCusto, setpPrecoCusto] = useState(''); // Custo Unitário
   const [pEstoque, setpEstoque] = useState('');
   const [pEstoqueMin, setpEstoqueMin] = useState('');
   const [pUnidade, setpUnidade] = useState('un');
+
+  // Multi-unit purchase helper inputs
+  const [pCustoTotal, setpCustoTotal] = useState('');
+  const [pQuantidadeTotal, setpQuantidadeTotal] = useState('');
+
+  // Auto calculate unit cost from Total Cost / Total Qty
+  useEffect(() => {
+    const total = parseFloat(pCustoTotal) || 0;
+    const qty = parseFloat(pQuantidadeTotal) || 0;
+    if (total > 0 && qty > 0) {
+      const calculatedUnit = total / qty;
+      setpPrecoCusto(calculatedUnit.toFixed(2));
+    }
+  }, [pCustoTotal, pQuantidadeTotal]);
 
   // Live Calculations helper
   const liveLucroCusto = useMemo(() => {
@@ -71,6 +80,8 @@ export default function ProductsRegistration({
     setpEstoque('');
     setpEstoqueMin('');
     setpUnidade('un');
+    setpCustoTotal('');
+    setpQuantidadeTotal('');
   };
 
   const handleEditTrigger = (p: Produto) => {
@@ -83,6 +94,8 @@ export default function ProductsRegistration({
     setpEstoque(p.estoque_atual.toString());
     setpEstoqueMin(p.estoque_minimo.toString());
     setpUnidade(p.unidade_medida);
+    setpCustoTotal('');
+    setpQuantidadeTotal('');
   };
 
   const handleOnSubmit = (e: React.FormEvent) => {
@@ -158,10 +171,10 @@ export default function ProductsRegistration({
         <div>
           <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             <Package className="w-5 h-5 text-emerald-500" />
-            <span>Cadastro do Mix de Produtos</span>
+            <span>Mix Comercial & Reposições de Custo</span>
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Gestão inteligente de compras, margem de markup na venda, regras de teto e controlador de estoque crítico.
+            Gestão inteligente de margem e markup baseada em cálculo ponderado e lucratividade real unitária integrada.
           </p>
         </div>
 
@@ -170,7 +183,7 @@ export default function ProductsRegistration({
             resetFormValues();
             setIsInserting(true);
           }}
-          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-500/10 flex items-center gap-1.5 self-start md:self-auto"
+          className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-500/10 flex items-center gap-1.5 self-start md:self-auto cursor-pointer"
         >
           <PlusCircle className="w-4 h-4" />
           <span>Cadastrar Produto</span>
@@ -180,7 +193,7 @@ export default function ProductsRegistration({
       {/* Stats Board Widgets */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-4 shadow-3xs">
-          <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-350 rounded-xl">
+          <div className="p-3 bg-slate-100 dark:bg-slate-800 text-slate-650 dark:text-indigo-400 rounded-xl">
             <Package className="w-5 h-5" />
           </div>
           <div>
@@ -190,7 +203,7 @@ export default function ProductsRegistration({
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-4 shadow-3xs">
-          <div className={`p-3 rounded-xl ${lowStockCount > 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-450' : 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-450'}`}>
+          <div className={`p-3 rounded-xl ${lowStockCount > 0 ? 'bg-amber-100 text-amber-600 dark:bg-amber-950/45' : 'bg-emerald-100 text-emerald-600'}`}>
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
@@ -202,31 +215,33 @@ export default function ProductsRegistration({
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex items-center gap-4 shadow-3xs">
-          <div className="p-3 bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-450 rounded-xl">
+          <div className="p-3 bg-emerald-100 text-emerald-650 rounded-xl">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
             <span className="block text-[11px] text-slate-400 font-bold uppercase tracking-wider">Margem de Lucro Média</span>
-            <span className="text-xl font-extrabold text-emerald-600 dark:text-emerald-405 block mt-0.5">{avgProfitMargin.toFixed(1)}% / item</span>
+            <span className="text-xl font-extrabold text-emerald-600 block mt-0.5">{avgProfitMargin.toFixed(1)}% / item</span>
           </div>
         </div>
       </div>
 
-      {/* Editing / Inserting Dynamic Inline Panel */}
+      {/* Product Register Form Modal with backdrop-blur */}
       {(editingId || isInserting) && (
-        <div className="bg-emerald-50/40 dark:bg-slate-900/40 border border-emerald-100 dark:border-slate-850 rounded-2xl p-4 md:p-6 shadow-xs">
-          <div className="flex items-center justify-between border-b border-emerald-100 dark:border-slate-800 pb-3 mb-5">
-            <h4 className="font-extrabold text-emerald-900 dark:text-emerald-405 text-sm flex items-center gap-2">
-              <Tag className="w-4 h-4 text-emerald-500 animate-pulse" />
-              <span>{editingId ? '🖊️ Editar Ficha Técnica do Produto' : '✨ Cadastrar Novo Produto Comercial'}</span>
-            </h4>
-            <button 
-              onClick={resetFormValues}
-              className="text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-305 font-bold px-3 py-1 rounded-lg transition-colors hover:bg-slate-50 dark:hover:bg-slate-750"
-            >
-              Cancelar Edição
-            </button>
-          </div>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto animate-fadeIn select-none">
+          <div className="bg-white dark:bg-slate-900 border border-slate-205 dark:border-slate-800 rounded-2xl p-6 shadow-2xl w-full max-w-2xl relative animate-scaleIn">
+            <div className="flex items-center justify-between border-b border-emerald-105 dark:border-slate-800 pb-3 mb-5">
+              <h4 className="font-extrabold text-emerald-950 dark:text-emerald-400 text-sm flex items-center gap-2">
+                <Tag className="w-4 h-4 text-emerald-500 animate-pulse" />
+                <span>{editingId ? '🖊️ Configuração Comercial de Item' : '✨ Cadastro de Produto com Cálculo de Custo Automatizado'}</span>
+              </h4>
+              <button 
+                type="button"
+                onClick={resetFormValues}
+                className="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-605 dark:text-slate-350 font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
 
           <form onSubmit={handleOnSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -237,10 +252,10 @@ export default function ProductsRegistration({
                 <input 
                   type="text" 
                   required 
-                  placeholder="Ex: Cerveja Original 600ml, Frango à Passarinho" 
+                  placeholder="Ex: Pizza Calabresa Suprema" 
                   value={pNome} 
                   onChange={e => setpNome(e.target.value)} 
-                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:text-white" 
+                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2" 
                 />
               </div>
 
@@ -248,43 +263,73 @@ export default function ProductsRegistration({
                 <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Categoria</label>
                 <input 
                   type="text" 
-                  placeholder="Ex: Bebidas, Salgados, Porções" 
+                  placeholder="Ex: Pizzas, Bebidas, Sobremesas" 
                   value={pCat} 
                   onChange={e => setpCat(e.target.value)} 
-                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:text-white" 
+                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2" 
                 />
               </div>
 
               <div>
-                <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Unidade de Medida</label>
+                <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Tipo / Unidade de Medida</label>
                 <select 
                   value={pUnidade} 
                   onChange={e => setpUnidade(e.target.value)} 
-                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:text-white font-semibold"
+                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 font-bold"
                 >
                   <option value="un">Unidade (un)</option>
-                  <option value="lt">Litro (lt)</option>
                   <option value="kg">Quilo (kg)</option>
+                  <option value="lt">Litro (lt)</option>
                   <option value="dose">Dose (dose)</option>
                 </select>
               </div>
 
-              {/* Financial Inputs: Cost & Sale pricing */}
-              <div>
-                <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Preço de Custo (Compra) R$</label>
-                <input 
-                  type="number" 
-                  step="0.01" 
-                  required 
-                  placeholder="0,00" 
-                  value={pPrecoCusto} 
-                  onChange={e => setpPrecoCusto(e.target.value)} 
-                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:text-white font-mono font-bold text-slate-800 dark:text-white" 
-                />
+              {/* AUTOMATION FIELDS: Custo Total, Quantidade total, calculated Unit-Cost */}
+              <div className="bg-slate-50 dark:bg-slate-950 p-3 rounded-lg border border-slate-200 dark:border-slate-800 md:col-span-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 block mb-1">Custo Total da Compra R$</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    placeholder="Ex: 100.00" 
+                    value={pCustoTotal} 
+                    onChange={e => setpCustoTotal(e.target.value)} 
+                    className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded-lg px-3 py-2 font-mono font-bold" 
+                  />
+                  <span className="text-[9px] text-slate-400 mt-0.5 block">Valor pago no lote inteiro comercial</span>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-indigo-600 dark:text-indigo-400 block mb-1">Quantidade / Peso Total do Lote ({pUnidade})</label>
+                  <input 
+                    type="number" 
+                    step="any" 
+                    placeholder="Ex: 10 (ou 4.5kg)" 
+                    value={pQuantidadeTotal} 
+                    onChange={e => setpQuantidadeTotal(e.target.value)} 
+                    className="w-full text-xs bg-white dark:bg-slate-900 border border-slate-250 dark:border-slate-800 rounded-lg px-3 py-2 font-mono font-bold" 
+                  />
+                  <span className="text-[9px] text-slate-400 mt-0.5 block">Total de unidades ou KG obtidos</span>
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-emerald-600 block mb-1">Preço de Custo Unitário (Calculado) R$</label>
+                  <input 
+                    type="number" 
+                    step="0.01" 
+                    required 
+                    placeholder="Calculado automaticamente" 
+                    value={pPrecoCusto} 
+                    onChange={e => setpPrecoCusto(e.target.value)} 
+                    className="w-full text-xs bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250 dark:border-emerald-800 rounded-lg px-3 py-2 text-emerald-700 dark:text-emerald-450 font-mono font-black" 
+                  />
+                  <span className="text-[9px] text-emerald-600 mt-0.5 block">Custo Unitário Final (Custo Total / Lote)</span>
+                </div>
               </div>
 
+              {/* Price of Sale & stock alert */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Preço de Venda R$</label>
+                <label className="text-[10px] uppercase font-bold text-slate-550 block mb-1">Preço de Venda R$</label>
                 <input 
                   type="number" 
                   step="0.01" 
@@ -292,32 +337,31 @@ export default function ProductsRegistration({
                   placeholder="0,00" 
                   value={pPrecoVenda} 
                   onChange={e => setpPrecoVenda(e.target.value)} 
-                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:text-white font-mono font-bold text-emerald-600 dark:text-emerald-400" 
+                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 font-mono font-bold text-emerald-600" 
                 />
               </div>
 
-              {/* Stock settings */}
               <div>
-                <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Estoque Inicial Atual</label>
+                <label className="text-[10px] uppercase font-bold text-slate-550 block mb-1">Estoque Inicial Atual</label>
                 <input 
                   type="number" 
                   required 
                   placeholder="Ex: 50" 
                   value={pEstoque} 
                   onChange={e => setpEstoque(e.target.value)} 
-                  className="w-full text-xs bg-white dark:bg-slate-955 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:text-white font-mono" 
+                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-805 rounded-lg px-3 py-2 font-mono" 
                 />
               </div>
 
               <div>
-                <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Estoque Mínimo (Alerta)</label>
+                <label className="text-[10px] uppercase font-bold text-slate-550 block mb-1">Estoque Mínimo (Alerta Crítico)</label>
                 <input 
                   type="number" 
                   required 
                   placeholder="Ex: 10" 
                   value={pEstoqueMin} 
                   onChange={e => setpEstoqueMin(e.target.value)} 
-                  className="w-full text-xs bg-white dark:bg-slate-955 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:ring-1 focus:ring-emerald-500 focus:outline-none dark:text-white font-mono" 
+                  className="w-full text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-805 rounded-lg px-3 py-2 font-mono" 
                 />
               </div>
             </div>
@@ -325,58 +369,53 @@ export default function ProductsRegistration({
             {/* LIVE CALCULATED FEEDBACK AREA */}
             <div className="bg-slate-100/60 dark:bg-slate-950/60 rounded-xl p-3.5 border border-slate-200/50 dark:border-slate-850 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 block mb-1">Retorno de Custos e Margens (Indicador Dinâmico)</span>
+                <span className="text-[10px] uppercase tracking-wider font-extrabold text-slate-400 block mb-1">Indicadores Financeiros de Lucro Unitário</span>
                 <div className="space-y-1.5 mt-2">
-                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
-                    <span>Custo do Produto:</span>
+                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-350">
+                    <span>Preço de Custo Unitário:</span>
                     <strong className="font-mono text-slate-800 dark:text-white">R$ {(parseFloat(pPrecoCusto) || 0).toFixed(2)}</strong>
                   </div>
-                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-300">
-                    <span>Preço de Venda Balcão:</span>
-                    <strong className="font-mono text-emerald-600 dark:text-emerald-400">R$ {(parseFloat(pPrecoVenda) || 0).toFixed(2)}</strong>
+                  <div className="flex justify-between text-xs text-slate-600 dark:text-slate-350">
+                    <span>Preço de Venda Comercial:</span>
+                    <strong className="font-mono text-emerald-605">R$ {(parseFloat(pPrecoVenda) || 0).toFixed(2)}</strong>
                   </div>
                 </div>
               </div>
 
               <div className="flex flex-col sm:border-l border-slate-200 dark:border-slate-800 sm:pl-4 justify-center gap-1.5">
                 <div className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 px-3 py-1.5 rounded-lg text-xs">
-                  <span className="text-slate-500">Valor do Lucro Líquido:</span>
+                  <span className="text-slate-500">Lucro Real por Unidade (Venda - Custo):</span>
                   <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono">
                     R$ {liveLucroCusto.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 px-3 py-1.5 rounded-lg text-xs">
                   <span className="text-slate-500">Margem Comercial:</span>
-                  <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                    {liveMargemLucro.toFixed(1)}% <span className="text-[10px] text-slate-400 font-medium">L/V</span>
-                  </span>
-                </div>
-                <div className="flex justify-between items-center bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800 px-3 py-1.5 rounded-lg text-xs">
-                  <span className="text-slate-500">Markup (Sobre o Custo):</span>
-                  <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono">
-                    +{liveMarkup.toFixed(1)}% <span className="text-[10px] text-slate-400 font-medium">M/C</span>
+                  <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                    {liveMargemLucro.toFixed(1)}% / item
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3.5 border-t border-slate-200 dark:border-slate-800 pt-3.5">
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-850 pt-4">
               <button 
                 type="button" 
                 onClick={resetFormValues} 
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-250 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer"
               >
                 Descartar Mudanças
               </button>
               <button 
                 type="submit" 
-                className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-emerald-500/10"
+                className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs rounded-xl cursor-pointer shadow-md"
               >
-                Gravar Configuração Técnica
+                Gravar Produto Comercial
               </button>
             </div>
           </form>
         </div>
+      </div>
       )}
 
       {/* Product List filter bar */}
@@ -397,7 +436,7 @@ export default function ProductsRegistration({
             <select
               value={categoryFilter}
               onChange={e => setCategoryFilter(e.target.value)}
-              className="text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 focus:outline-emerald-500 dark:text-white font-semibold"
+              className="text-xs bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 dark:text-white font-semibold"
             >
               <option value="">Filtrar: Todas Categorias</option>
               {categories.map(cat => (
@@ -410,20 +449,20 @@ export default function ProductsRegistration({
         {/* Tabular data listing of commercial products */}
         <div className="border border-slate-150 dark:border-slate-800 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-xs text-slate-700 dark:text-slate-300">
-              <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-150 dark:border-slate-850 text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 font-sans">
+            <table className="w-full text-xs text-slate-705">
+              <thead className="bg-slate-50 dark:bg-slate-950 border-b border-slate-150 dark:border-slate-850 text-[10px] uppercase font-bold text-slate-400">
                 <tr>
                   <th className="text-left p-3.5">Ficha / Identificação</th>
-                  <th className="text-right p-3.5">Preço Custo (R$)</th>
-                  <th className="text-right p-3.5">Preço Venda (R$)</th>
-                  <th className="text-center p-3.5">Lucro Unitário</th>
-                  <th className="text-center p-3.5">Margem (LV)</th>
+                  <th className="text-right p-3.5">Preço Custo Unitário</th>
+                  <th className="text-right p-3.5">Preço Venda unitário</th>
+                  <th className="text-center p-3.5">Lucro por Unidade</th>
+                  <th className="text-center p-3.5">Margem Comercial</th>
                   <th className="text-center p-3.5">Markup (MC)</th>
-                  <th className="text-center p-3.5">Status Estoque</th>
-                  <th className="text-right p-3.5">Ações</th>
+                  <th className="text-center p-3.5">Estoques</th>
+                  <th className="text-center p-3.5">Ações</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-110 dark:divide-slate-800 bg-white dark:bg-slate-900">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-white dark:bg-slate-900 text-xs">
                 {filteredProducts.map(p => {
                   const lucroUnitario = p.preco_venda - p.preco_custo;
                   const marginLv = p.preco_venda > 0 ? (lucroUnitario / p.preco_venda) * 100 : 0;
@@ -434,41 +473,40 @@ export default function ProductsRegistration({
                     <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                       <td className="p-3.5">
                         <span className="font-extrabold text-slate-800 dark:text-white block text-sm">{p.nome}</span>
-                        <span className="text-[10px] text-slate-400 dark:text-slate-400 font-medium block mt-0.5 uppercase tracking-wider">{p.categoria}</span>
+                        <span className="text-[10px] text-slate-400 font-medium block mt-0.5 uppercase tracking-wider">{p.categoria}</span>
                       </td>
-                      <td className="p-3.5 text-right font-bold text-slate-500 dark:text-slate-400 font-mono">R$ {p.preco_custo.toFixed(2)}</td>
+                      <td className="p-3.5 text-right font-bold text-slate-650 dark:text-slate-350 font-mono">R$ {p.preco_custo.toFixed(2)}</td>
                       <td className="p-3.5 text-right font-black text-slate-900 dark:text-white font-mono">R$ {p.preco_venda.toFixed(2)}</td>
                       <td className="p-3.5 text-center">
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        <span className="font-black text-emerald-600 dark:text-emerald-400 font-mono">
                           R$ {lucroUnitario.toFixed(2)}
                         </span>
                       </td>
                       <td className="p-3.5 text-center font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                         {marginLv.toFixed(0)}%
                       </td>
-                      <td className="p-3.5 text-center font-bold text-emerald-605 dark:text-emerald-450 font-mono">
+                      <td className="p-3.5 text-center font-bold text-emerald-600 dark:text-emerald-400 font-mono">
                         +{markupMc.toFixed(0)}%
                       </td>
                       <td className="p-3.5 text-center">
                         <span className={`px-2.5 py-1 rounded-full font-mono font-bold text-xs ${
                           p.estoque_atual <= 0 
-                            ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400 border border-red-200 dark:border-red-900/30 font-black animate-pulse' 
+                            ? 'bg-red-50 text-red-700 border border-red-200 animate-pulse font-black' 
                             : isLow 
-                              ? 'bg-amber-50 text-amber-705 dark:bg-amber-950/30 dark:text-amber-400 border border-amber-200 dark:border-amber-900/30 font-black' 
-                              : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400 border border-emerald-250 dark:border-emerald-900/30'
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200 font-black' 
+                              : 'bg-emerald-50 text-emerald-800 border border-emerald-200'
                         }`}>
                           {p.estoque_atual} {p.unidade_medida}
                         </span>
                       </td>
-                      <td className="p-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
+                      <td className="p-3.5">
+                        <div className="flex items-center justify-center gap-1.5">
                           <button 
                             onClick={() => handleEditTrigger(p)} 
-                            className="p-1.5 text-slate-600 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400 bg-slate-100 hover:bg-emerald-50 dark:bg-slate-800 dark:hover:bg-slate-800 rounded-lg transition-colors inline-flex items-center gap-1 font-bold text-[10px]"
-                            title="Editar especificações"
+                            className="px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-indigo-400 font-bold rounded-lg transition-all text-[10px] flex items-center gap-1 cursor-pointer hover:scale-[1.03]"
                           >
                             <Edit className="w-3.5 h-3.5" />
-                            <span className="hidden lg:inline">Editar</span>
+                            <span>Editar</span>
                           </button>
                           <button 
                             onClick={() => { 
@@ -476,11 +514,10 @@ export default function ProductsRegistration({
                                 onDeleteProduto(p.id);
                               } 
                             }} 
-                            className="p-1.5 text-rose-600 hover:text-white hover:bg-rose-500 dark:hover:bg-rose-600 rounded-lg transition-all inline-flex items-center gap-1 font-bold text-[10px]"
-                            title="Excluir produto"
+                            className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-955/20 dark:text-rose-450 font-bold rounded-lg transition-all text-[10px] flex items-center gap-1 cursor-pointer hover:scale-[1.03]"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                            <span className="hidden lg:inline">Deletar</span>
+                            <span>Excluir</span>
                           </button>
                         </div>
                       </td>
@@ -490,7 +527,7 @@ export default function ProductsRegistration({
 
                 {filteredProducts.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-400 dark:text-slate-400 italic">
+                    <td colSpan={8} className="p-8 text-center text-slate-400 italic">
                       Nenhum produto cadastrado coincide com a pesquisa/filtro.
                     </td>
                   </tr>

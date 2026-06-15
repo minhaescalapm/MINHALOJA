@@ -10,6 +10,12 @@ export interface Funcionario {
   telefone: string;
   comissao_percentual: number;
   data_cadastro: string;
+  salario_base?: number; // Base salary for company payroll
+  cep?: string;
+  endereco?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
 }
 
 export interface Cliente {
@@ -21,6 +27,10 @@ export interface Cliente {
   forma_pagamento_preferida?: 'dinheiro' | 'pix' | 'debito' | 'credito' | 'fiado';
   limite_fiado: number;
   data_cadastro: string;
+  cep?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
 }
 
 export interface Empresa {
@@ -40,6 +50,12 @@ export interface Fornecedor {
   contato: string;
   telefone: string;
   cnpj_cpf: string;
+  contato_responsavel?: string; // Optional full name of responder
+  cep?: string;
+  endereco?: string;
+  numero?: string;
+  bairro?: string;
+  cidade?: string;
 }
 
 export interface Produto {
@@ -82,6 +98,7 @@ export interface Pedido {
   data_pedido: string;
   driver_name?: string; // Para deliverys
   itens?: ItemPedido[];
+  total?: number; // Total order value
 }
 
 export interface ItemPedido {
@@ -113,6 +130,7 @@ export interface MovimentacaoCaixa {
   pedido_id?: string;
   data: string;
   descricao?: string;
+  operador?: string; // Optional user who logged this transaction
 }
 
 export interface ContaAPagar {
@@ -138,8 +156,22 @@ export interface ContaAReceber {
 export interface ValeEComissao {
   id: string;
   funcionario_id: string;
-  tipo: 'vale' | 'comissao';
+  tipo: 'vale' | 'comissao' | 'bonificacao';
   valor: number;
   status: 'pendente' | 'pago';
   data: string;
+  descricao?: string;
+}
+
+export interface HistoricoPagamentoFuncionario {
+  id: string;
+  funcionario_id: string;
+  nome_funcionario: string;
+  cargo: string;
+  salario_base: number;
+  comissoes: number;
+  bonificacoes: number;
+  vales: number;
+  salario_liquido: number;
+  data_pagamento: string;
 }

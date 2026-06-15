@@ -145,7 +145,7 @@ export default function GarcomView({
         <div className="flex-1 bg-slate-50 pt-5 flex flex-col overflow-hidden relative">
           
           {/* Internal App Navbar */}
-          <div className="bg-indigo-650 h-14 px-3 flex items-center justify-between text-white shrink-0 shadow-sm">
+          <div className="bg-indigo-600 h-14 px-3 flex items-center justify-between text-white shrink-0 shadow-sm">
             {selectedMesa ? (
               <button 
                 onClick={() => setSelectedMesa(null)}

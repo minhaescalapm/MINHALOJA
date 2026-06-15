@@ -6,7 +6,7 @@
 import React, { useState, useMemo } from 'react';
 import { 
   Users, Tag, Truck, UserPlus, Briefcase, Search, PlusCircle, 
-  Trash2, Edit, CheckCircle, Eye, AlertCircle, RefreshCcw
+  Trash2, Edit, CheckCircle, Eye, AlertCircle, RefreshCcw, Loader2
 } from 'lucide-react';
 import { Cliente, Produto, Funcionario, Fornecedor } from '../types';
 
@@ -70,17 +70,93 @@ export default function RegistersCRUD({
   const [cEnd, setcEnd] = useState('');
   const [cLimite, setcLimite] = useState('');
 
-  // Employees
+  // Employees CEP addition
   const [fNome, setfNome] = useState('');
   const [fCargo, setfCargo] = useState<'admin' | 'caixa' | 'garcom'>('garcom');
   const [fTel, setfTel] = useState('');
   const [fComissao, setfComissao] = useState('');
+  const [fCep, setfCep] = useState('');
+  const [fEnd, setfEnd] = useState('');
+  const [fNumero, setfNumero] = useState('');
+  const [fBairro, setfBairro] = useState('');
+  const [fCidade, setfCidade] = useState('');
+  const [loadingFCep, setLoadingFCep] = useState(false);
+  const [fCepSuccess, setFCepSuccess] = useState(false);
 
-  // Suppliers
+  // Suppliers CEP addition
   const [forNome, setforNome] = useState('');
   const [forContato, setforContato] = useState('');
   const [forTel, setforTel] = useState('');
   const [forCNPJ, setforCNPJ] = useState('');
+  const [forCep, setforCep] = useState('');
+  const [forEnd, setforEnd] = useState('');
+  const [forNumero, setforNumero] = useState('');
+  const [forBairro, setforBairro] = useState('');
+  const [forCidade, setforCidade] = useState('');
+  const [loadingForCep, setLoadingForCep] = useState(false);
+  const [forCepSuccess, setForCepSuccess] = useState(false);
+
+  // Auto-lookup Employee CEP on change
+  React.useEffect(() => {
+    const cleanFCep = fCep.replace(/\D/g, '');
+    if (cleanFCep.length === 8) {
+      setLoadingFCep(true);
+      setFCepSuccess(false);
+      fetch(`https://viacep.com.br/ws/${cleanFCep}/json/`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.erro) {
+            setfEnd(data.logradouro || '');
+            setfBairro(data.bairro || '');
+            setfCidade(`${data.localidade || ''} - ${data.uf || ''}`);
+            setFCepSuccess(true);
+            setTimeout(() => {
+              const numInput = document.getElementById('fNumeroInput');
+              if (numInput) numInput.focus();
+            }, 100);
+          } else {
+            alert('CEP do funcionário não encontrado no ViaCEP!');
+          }
+        })
+        .catch(err => {
+          console.error('Erro ao buscar CEP do funcionário:', err);
+        })
+        .finally(() => {
+          setLoadingFCep(false);
+        });
+    }
+  }, [fCep]);
+
+  // Auto-lookup Supplier CEP on change
+  React.useEffect(() => {
+    const cleanForCep = forCep.replace(/\D/g, '');
+    if (cleanForCep.length === 8) {
+      setLoadingForCep(true);
+      setForCepSuccess(false);
+      fetch(`https://viacep.com.br/ws/${cleanForCep}/json/`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.erro) {
+            setforEnd(data.logradouro || '');
+            setforBairro(data.bairro || '');
+            setforCidade(`${data.localidade || ''} - ${data.uf || ''}`);
+            setForCepSuccess(true);
+            setTimeout(() => {
+              const numInput = document.getElementById('forNumeroInput');
+              if (numInput) numInput.focus();
+            }, 100);
+          } else {
+            alert('CEP do fornecedor não encontrado no ViaCEP!');
+          }
+        })
+        .catch(err => {
+          console.error('Erro ao buscar CEP do fornecedor:', err);
+        })
+        .finally(() => {
+          setLoadingForCep(false);
+        });
+    }
+  }, [forCep]);
 
   // Reset forms helper
   const resetFormValues = () => {
@@ -90,7 +166,9 @@ export default function RegistersCRUD({
     setpNome(''); setpCat(''); setpPrecoVenda(''); setpPrecoCusto(''); setpEstoque(''); setpEstoqueMin(''); setpUnidade('un');
     setcNome(''); setcTel(''); setcEnd(''); setcLimite('');
     setfNome(''); setfCargo('garcom'); setfTel(''); setfComissao('');
+    setfCep(''); setfEnd(''); setfNumero(''); setfBairro(''); setfCidade(''); setFCepSuccess(false);
     setforNome(''); setforContato(''); setforTel(''); setforCNPJ('');
+    setforCep(''); setforEnd(''); setforNumero(''); setforBairro(''); setforCidade(''); setForCepSuccess(false);
   };
 
   const handleEditTrigger = (item: any, type: string) => {
@@ -115,11 +193,21 @@ export default function RegistersCRUD({
       setfCargo(item.cargo);
       setfTel(item.telefone);
       setfComissao(item.comissao_percentual.toString());
+      setfCep(item.cep || '');
+      setfEnd(item.endereco || '');
+      setfNumero(item.numero || '');
+      setfBairro(item.bairro || '');
+      setfCidade(item.cidade || '');
     } else if (type === 'fornecedor') {
       setforNome(item.nome_empresa);
       setforContato(item.contato || '');
       setforTel(item.telefone || '');
       setforCNPJ(item.cnpj_cpf);
+      setforCep(item.cep || '');
+      setforEnd(item.endereco || '');
+      setforNumero(item.numero || '');
+      setforBairro(item.bairro || '');
+      setforCidade(item.cidade || '');
     }
   };
 
@@ -162,10 +250,19 @@ export default function RegistersCRUD({
         nome: fNome,
         cargo: fCargo,
         telefone: fTel,
-        comissao_percentual: parseFloat(fComissao) || 0
+        comissao_percentual: parseFloat(fComissao) || 0,
+        cep: fCep,
+        endereco: fEnd,
+        numero: fNumero,
+        bairro: fBairro,
+        cidade: fCidade
       };
 
-      if (!payload.nome) { alert("Informa o nome do funcionário!"); return; }
+      if (!payload.nome) { alert("Informe o nome do funcionário!"); return; }
+      if (!payload.cep || !payload.endereco || !payload.numero || !payload.bairro || !payload.cidade) {
+        alert("O preenchimento do CEP e endereço completo é obrigatório para funcionários!");
+        return;
+      }
       if (editingId) {
         onUpdateFuncionario(editingId, payload);
       } else {
@@ -176,10 +273,19 @@ export default function RegistersCRUD({
         nome_empresa: forNome,
         contato: forContato,
         telefone: forTel,
-        cnpj_cpf: forCNPJ
+        cnpj_cpf: forCNPJ,
+        cep: forCep,
+        endereco: forEnd,
+        numero: forNumero,
+        bairro: forBairro,
+        cidade: forCidade
       };
 
       if (!payload.nome_empresa || !payload.cnpj_cpf) { alert("Nome da Empresa e CNPJ/CPF são obrigatórios!"); return; }
+      if (!payload.cep || !payload.endereco || !payload.numero || !payload.bairro || !payload.cidade) {
+        alert("O preenchimento do CEP e endereço completo é obrigatório para fornecedores!");
+        return;
+      }
       if (editingId) {
         onUpdateFornecedor(editingId, payload);
       } else {
@@ -263,7 +369,7 @@ export default function RegistersCRUD({
               resetFormValues();
               setIsInserting(true);
             }}
-            className="px-3.5 py-1.5 bg-indigo-650 hover:bg-indigo-600 text-white text-xs font-black rounded-lg transition-colors flex items-center gap-1 shadow-sm"
+            className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black rounded-lg transition-colors flex items-center gap-1 shadow-sm cursor-pointer"
           >
             <PlusCircle className="w-3.5 h-3.5" />
             <span>Cadastrar</span>
@@ -273,20 +379,23 @@ export default function RegistersCRUD({
 
       {/* Editing or Inserting Inline Drawer/Panel representation */}
       {(editingId || isInserting) && (
-        <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 md:p-5 text-slate-850 shadow-2xs">
-          <div className="flex items-center justify-between border-b border-indigo-150 pb-2 mb-4">
-            <h4 className="font-extrabold text-indigo-900 text-sm">
-              {editingId ? '📝 Editar Registro Ativo' : '➕ Adicionar Novo Lançamento'}
-            </h4>
-            <button 
-              onClick={resetFormValues}
-              className="text-xs bg-white border border-slate-250 text-slate-600 font-bold px-2 py-0.5 rounded shadow-3xs"
-            >
-              Cancelar/Fechar
-            </button>
-          </div>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto animate-fadeIn select-none">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl w-full max-w-2xl relative animate-scaleIn">
+            <div className="flex items-center justify-between border-b border-indigo-100 dark:border-slate-800 pb-3 mb-5">
+              <h4 className="font-extrabold text-indigo-900 dark:text-indigo-400 text-sm">
+                {editingId ? '🖊️ Editar Registro Ativo' : '✨ Adicionar Novo Lançamento'}
+              </h4>
+              <button 
+                type="button"
+                onClick={resetFormValues}
+                className="text-xs bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-350 font-bold px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+            </div>
 
-          <form onSubmit={handleOnSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <form onSubmit={handleOnSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             
             {/* PRODUCT PROPERTIES */}
             {activeSubTab === 'produtos' && (
@@ -353,11 +462,11 @@ export default function RegistersCRUD({
               <>
                 <div className="md:col-span-2">
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Nome do Funcionário</label>
-                  <input type="text" required placeholder="Mateus Silva..." value={fNome} onChange={e => setfNome(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550" />
+                  <input type="text" required placeholder="Mateus Silva..." value={fNome} onChange={e => setfNome(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 block w-full text-slate-800" />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Cargo</label>
-                  <select value={fCargo} onChange={e => setfCargo(e.target.value as any)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 font-bold">
+                  <select value={fCargo} onChange={e => setfCargo(e.target.value as any)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 font-bold block w-full">
                     <option value="garcom">Garçom</option>
                     <option value="caixa">Operador de Caixa</option>
                     <option value="admin">Administrador Geral</option>
@@ -365,14 +474,40 @@ export default function RegistersCRUD({
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone de Contato</label>
-                  <input type="text" placeholder="(11) 99999-0000" value={fTel} onChange={e => setfTel(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550" />
+                  <input type="text" required placeholder="(11) 99999-0000" value={fTel} onChange={e => setfTel(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 block w-full text-slate-800" />
                 </div>
                 {fCargo === 'garcom' && (
                   <div>
                     <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Comissão Percentual (%)</label>
-                    <input type="number" placeholder="10" value={fComissao} onChange={e => setfComissao(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 font-mono font-bold" />
+                    <input type="number" placeholder="10" value={fComissao} onChange={e => setfComissao(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 font-mono font-bold block w-full text-slate-805" />
                   </div>
                 )}
+                <div className="md:col-span-4 border-t border-slate-105 pt-3">
+                  <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 tracking-wider uppercase">📞 Detalhes Residenciais</span>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-indigo-650 block mb-1 flex items-center gap-1">
+                    <span>CEP *</span>
+                    {loadingFCep && <Loader2 className="w-3 h-3 animate-spin text-indigo-505" />}
+                  </label>
+                  <input type="text" required placeholder="00000-000" value={fCep} onChange={e => setfCep(e.target.value)} className={`w-full text-xs bg-white border rounded px-2.5 py-1.5 focus:outline-indigo-550 font-mono font-bold text-slate-800 ${fCepSuccess ? 'border-emerald-500 bg-emerald-50/10' : 'border-slate-200'}`} />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Endereço / Logradouro *</label>
+                  <input type="text" required placeholder="Rua, Avenida, Travessa..." value={fEnd} onChange={e => setfEnd(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Número *</label>
+                  <input id="fNumeroInput" type="text" required placeholder="Ex: 45, Ap 12" value={fNumero} onChange={e => setfNumero(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full font-bold" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Bairro *</label>
+                  <input type="text" required placeholder="Bairro..." value={fBairro} onChange={e => setfBairro(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Cidade / UF *</label>
+                  <input type="text" required placeholder="Cidade - UF..." value={fCidade} onChange={e => setfCidade(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                </div>
               </>
             )}
 
@@ -381,29 +516,69 @@ export default function RegistersCRUD({
               <>
                 <div className="md:col-span-2">
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Razão Social / Nome Empresa</label>
-                  <input type="text" required placeholder="AMBEV Alimentos..." value={forNome} onChange={e => setforNome(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550" />
+                  <input type="text" required placeholder="AMBEV Alimentos..." value={forNome} onChange={e => setforNome(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">CNPJ ou CPF</label>
-                  <input type="text" required placeholder="00.000.000/0001-00" value={forCNPJ} onChange={e => setforCNPJ(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 font-mono font-bold" />
+                  <input type="text" required placeholder="00.000.000/0001-00" value={forCNPJ} onChange={e => setforCNPJ(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 font-mono font-bold text-slate-800 block w-full" />
                 </div>
                 <div>
                   <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Pessoa de Contato</label>
-                  <input type="text" placeholder="Sandra, Rodrigo..." value={forContato} onChange={e => setforContato(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550" />
+                  <input type="text" placeholder="Sandra, Rodrigo..." value={forContato} onChange={e => setforContato(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone de Vendas</label>
+                  <input type="text" placeholder="(11) 3322-1100" value={forTel} onChange={e => setforTel(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                </div>
+                <div className="md:col-span-4 border-t border-slate-105 pt-3">
+                  <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 tracking-wider uppercase">🚚 Sede Comercial / Endereço</span>
                 </div>
                 <div>
-                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Telefone de Vendas</label>
-                  <input type="text" placeholder="(11) 3322-1100" value={forTel} onChange={e => setforTel(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550" />
+                  <label className="text-[10px] uppercase font-bold text-indigo-650 block mb-1 flex items-center gap-1">
+                    <span>CEP *</span>
+                    {loadingForCep && <Loader2 className="w-3 h-3 animate-spin text-indigo-505" />}
+                  </label>
+                  <input type="text" required placeholder="00000-000" value={forCep} onChange={e => setforCep(e.target.value)} className={`w-full text-xs bg-white border rounded px-2.5 py-1.5 focus:outline-indigo-550 font-mono font-bold text-slate-800 ${forCepSuccess ? 'border-emerald-500 bg-emerald-50/10' : 'border-slate-200'}`} />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Rua / Logradouro *</label>
+                  <input type="text" required placeholder="Rua, Avenida, Praça..." value={forEnd} onChange={e => setforEnd(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Número *</label>
+                  <input id="forNumeroInput" type="text" required placeholder="Ex: 110, Galpão B" value={forNumero} onChange={e => setforNumero(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full font-bold" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Bairro *</label>
+                  <input type="text" required placeholder="Bairro..." value={forBairro} onChange={e => setforBairro(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-500 block mb-1">Cidade / UF *</label>
+                  <input type="text" required placeholder="Cidade - UF..." value={forCidade} onChange={e => setforCidade(e.target.value)} className="w-full text-xs bg-white border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 text-slate-800 block w-full" />
                 </div>
               </>
             )}
 
-            <div className="md:col-span-4 flex items-center justify-end gap-2 border-t border-indigo-100 pt-3.5 mt-2">
-              <button type="button" onClick={resetFormValues} className="px-3.5 py-2 bg-indigo-100 text-indigo-700 font-bold text-xs rounded transition-all">Descartar</button>
-              <button type="submit" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded transition-all shadow-md">Salvar Informações</button>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-800 pt-4 mt-6">
+              <button 
+                type="button" 
+                onClick={resetFormValues} 
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors"
+              >
+                Descartar
+              </button>
+              <button 
+                type="submit" 
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl cursor-pointer shadow-md transition-colors"
+              >
+                Salvar Informações
+              </button>
             </div>
           </form>
         </div>
+      </div>
       )}
 
       {/* RENDER ACTIVE TAB TABLE LIST */}

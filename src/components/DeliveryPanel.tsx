@@ -9,12 +9,13 @@ import {
   PlusCircle, Search, Sparkles, Coins, Trash2, Plus, Minus,
   DollarSign, AlertTriangle, Check
 } from 'lucide-react';
-import { Pedido, Cliente, Produto } from '../types';
+import { Pedido, Cliente, Produto, Funcionario } from '../types';
 
 interface DeliveryPanelProps {
   pedidos: Pedido[];
   clientes: Cliente[];
   produtos: Produto[];
+  funcionarios: Funcionario[];
   onUpdatePedidoStatus: (pedidoId: string, status: Pedido['status']) => void;
   onDispatchDelivery: (pedidoId: string, driverName: string) => void;
   
@@ -31,6 +32,7 @@ export default function DeliveryPanel({
   pedidos,
   clientes,
   produtos,
+  funcionarios,
   onUpdatePedidoStatus,
   onDispatchDelivery,
   caixaDeliveryStatus,
@@ -141,6 +143,47 @@ export default function DeliveryPanel({
   const cartSubtotal = cart.reduce((sum, item) => sum + (item.produto.preco_venda * item.quantidade), 0);
   const deliveryFee = 5.00;
   const cartTotal = cartSubtotal > 0 ? cartSubtotal + deliveryFee : 0;
+
+  // --- WHATSAPP INTELLIGENCE HELPERS ---
+  const formatWhatsAppPhone = (phone: string) => {
+    let cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 0) return '';
+    if (cleaned.length <= 11 && !cleaned.startsWith('55')) {
+      cleaned = '55' + cleaned;
+    }
+    return cleaned;
+  };
+
+  const getWhatsAppDriverText = (pedido: any, client: any, total: number) => {
+    const lineItemsText = pedido.itens?.map((item: any) => {
+      const prod = produtos.find(item_p => item_p.id === item.produto_id);
+      return `• ${item.quantidade}x ${prod?.nome || 'Item'}`;
+    }).join('%0A') || '';
+
+    const mapsQuery = encodeURIComponent(client?.endereco || '');
+    const mapsLink = `https://www.google.com/maps/search/?api=1&query=${mapsQuery}`;
+
+    const text = `*📦 NOVO DESPACHO - PIZZARIA BELLA ITÁLIA*%0A%0A` +
+      `*👤 CLIENTE:* ${client?.nome || 'Consumidor'}%0A` +
+      `*📞 CONTATO:* ${client?.telefone || 'Não informado'}%0A` +
+      `*📍 ENDEREÇO:* ${client?.endereco || 'Não cadastrado'}%0A` +
+      `*🗺️ MAPS GPS:* ${mapsLink}%0A%0A` +
+      `*📋 ITENS DO PEDIDO:*%0A${lineItemsText}%0A%0A` +
+      `*💵 FINANCEIRO RECOLHER:*%0A` +
+      `- Taxa de Entrega: R$ ${deliveryFee.toFixed(2)}%0A` +
+      `- *TOTAL RECOLHER: R$ ${total.toFixed(2)}*%0A%0A` +
+      `*⚠️ ORIENTAÇÕES DE RETORNO:*%0AFavor retornar imediatamente após a entrega. Obrigado!`;
+    return text;
+  };
+
+  const getWhatsAppClientText = (pedido: any, client: any) => {
+    const text = `*🍕 SEU PEDIDO SAIU PARA ENTREGA! - PIZZARIA BELLA ITÁLIA*%0A%0A` +
+      `Olá *${client?.nome || 'Cliente'}*, temos boas notícias!%0A` +
+      `Seu pedido já saiu do nosso forno e está a caminho do seu endereço.%0A%0A` +
+      `*🛵 ENTREGADOR:* *${pedido.driver_name || 'Nosso Motoboy'}*%0A%0A` +
+      `Agradecemos a preferência! Em instantes o entregador estará no local. Bon appétit!`;
+    return text;
+  };
 
   // Submit delivery order
   const handleLaunchDelivery = (e: React.FormEvent) => {
@@ -373,20 +416,68 @@ export default function DeliveryPanel({
                 {/* Operations & Dispatching block */}
                 <div className="pt-3 border-t border-slate-100 space-y-3">
                   {p.driver_name ? (
-                    <div className="flex items-center justify-between text-xs text-slate-600 bg-indigo-50/50 p-2 border border-indigo-100 rounded-lg">
-                      <span>Motoboy escalado: <strong>{p.driver_name}</strong></span>
-                      <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse animate-duration-1000"></span>
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between text-xs text-slate-800 bg-emerald-50 dark:bg-emerald-950/20 p-2.5 border border-emerald-200/50 dark:border-emerald-800/40 rounded-xl">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Motoboy Escalado</span>
+                          <span className="font-extrabold text-slate-700 dark:text-emerald-400">{p.driver_name}</span>
+                        </div>
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                      </div>
+
+                      {/* WhatsApp Dispatch Actions */}
+                      <div className="grid grid-cols-2 gap-2 bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800">
+                        <div className="col-span-2 text-[9px] uppercase font-black text-slate-400 tracking-wider mb-1">
+                          <span>📲 Notificar Logística (WhatsApp)</span>
+                        </div>
+
+                        {/* Button 1: To Entregador */}
+                        <a
+                          href={`https://api.whatsapp.com/send?phone=${
+                            formatWhatsAppPhone(funcionarios.find(f => f.nome === p.driver_name)?.telefone || '')
+                          }&text=${getWhatsAppDriverText(p, client, absoluteTotal)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-center gap-1.5 px-2 py-2 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-[10px] rounded-lg transition-all shadow-3xs cursor-pointer"
+                        >
+                          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.49-4.22c1.706.993 3.5 1.517 5.518 1.518 5.4 0 9.79-4.378 9.793-9.767.001-2.61-1.01-5.064-2.848-6.903C17.123 3.69 14.671 2.68 12.012 2.68 6.619 2.68 2.23 7.06 2.227 12.443c-.001 1.947.514 3.844 1.493 5.54L2.73 21.43l3.817-1.65z" />
+                          </svg>
+                          <span>Rota p/ Motoboy</span>
+                        </a>
+
+                        {/* Button 2: To Cliente */}
+                        <a
+                          href={`https://api.whatsapp.com/send?phone=${
+                            formatWhatsAppPhone(client?.telefone || '')
+                          }&text=${getWhatsAppClientText(p, client)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center justify-center gap-1.5 px-2 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-extrabold text-[10px] rounded-lg transition-all shadow-3xs cursor-pointer"
+                        >
+                          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                            <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.49-4.22c1.706.993 3.5 1.517 5.518 1.518 5.4 0 9.79-4.378 9.793-9.767.001-2.61-1.01-5.064-2.848-6.903C17.123 3.69 14.671 2.68 12.012 2.68 6.619 2.68 2.23 7.06 2.227 12.443c-.001 1.947.514 3.844 1.493 5.54L2.73 21.43l3.817-1.65z" />
+                          </svg>
+                          <span>Notificar Cliente</span>
+                        </a>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <input 
+                        list={`motoboys-list-${p.id}`}
                         type="text" 
                         placeholder="Nome do Motoboy..."
                         disabled={caixaDeliveryStatus !== 'aberto'}
                         value={newDriverMap[p.id] || ''}
                         onChange={e => setNewDriverMap({ ...newDriverMap, [p.id]: e.target.value })}
-                        className="flex-1 text-xs border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-500 disabled:opacity-50"
+                        className="flex-1 text-xs border border-slate-200 rounded px-2.5 py-1.5 focus:outline-indigo-550 disabled:opacity-50 text-slate-800"
                       />
+                      <datalist id={`motoboys-list-${p.id}`}>
+                        {funcionarios.map(f => (
+                          <option key={f.id} value={f.nome} />
+                        ))}
+                      </datalist>
                       <button 
                         onClick={() => {
                           const name = newDriverMap[p.id];
@@ -397,7 +488,7 @@ export default function DeliveryPanel({
                           onDispatchDelivery(p.id, name);
                         }}
                         disabled={caixaDeliveryStatus !== 'aberto'}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                       >
                         Despachar
                       </button>

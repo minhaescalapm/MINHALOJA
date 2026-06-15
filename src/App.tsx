@@ -19,6 +19,9 @@ import {
   INITIAL_VALES_E_COMISSOES 
 } from './components/MockData';
 
+import { saveCloudState, syncFromCloud } from './lib/databaseService';
+
+
 import { 
   Produto, Cliente, Funcionario, Fornecedor, Mesa, Pedido, 
   CaixaDiario, MovimentacaoCaixa, ContaAPagar, ContaAReceber, ValeEComissao, Empresa 
@@ -32,6 +35,9 @@ import DeliveryPanel from './components/DeliveryPanel';
 import FinancialDashboard from './components/FinancialDashboard';
 import RegistersCRUD from './components/RegistersCRUD';
 import ProductsRegistration from './components/ProductsRegistration';
+import ClientsManagement from './components/ClientsManagement';
+import StockManagement from './components/StockManagement';
+import SupabasePanel from './components/SupabasePanel';
 
 // --- SPECIAL SEGMENT MOCK CONSTANTS FOR FICTIONAL COMPANIES ---
 const ZEROED_MESAS: Mesa[] = [
@@ -213,6 +219,8 @@ export default function App() {
   const [isThemeDark, setIsThemeDark] = useState<boolean>(false);
 
   // --- BUSINESS CORE STATE ---
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [dbStatusMsg, setDbStatusMsg] = useState<string>('Sincronizando...');
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
@@ -278,7 +286,7 @@ export default function App() {
   };
 
   // Navigation Active Tab inside SaaS
-  const [currentTab, setCurrentTab] = useState<'caixa' | 'mesas' | 'delivery' | 'financial' | 'crud' | 'waiter' | 'produtos'>('caixa');
+  const [currentTab, setCurrentTab] = useState<'caixa' | 'mesas' | 'delivery' | 'financial' | 'crud' | 'waiter' | 'produtos' | 'clientes' | 'estoque' | 'admin_saas' | 'database'>('caixa');
 
   // --- DYNAMIC MULTI-TENANT LOADER ---
   const loadTenantData = (tenantId: string) => {
@@ -353,6 +361,39 @@ export default function App() {
   useEffect(() => {
     loadTenantData(currentTenantId);
     
+    const runCloudSync = async () => {
+      setIsSyncing(true);
+      setDbStatusMsg('Buscando dados da nuvem...');
+      try {
+        const cloudData = await syncFromCloud(currentTenantId);
+        if (cloudData) {
+          if (cloudData.saas_produtos !== undefined) setProdutos(cloudData.saas_produtos);
+          if (cloudData.saas_clientes !== undefined) setClientes(cloudData.saas_clientes);
+          if (cloudData.saas_funcionarios !== undefined) setFuncionarios(cloudData.saas_funcionarios);
+          if (cloudData.saas_fornecedores !== undefined) setFornecedores(cloudData.saas_fornecedores);
+          if (cloudData.saas_mesas !== undefined) setMesas(cloudData.saas_mesas);
+          if (cloudData.saas_pedidos !== undefined) setPedidos(cloudData.saas_pedidos);
+          if (cloudData.saas_caixas !== undefined) setCaixas(cloudData.saas_caixas);
+          if (cloudData.saas_movimentacoes !== undefined) setMovimentacoes(cloudData.saas_movimentacoes);
+          if (cloudData.saas_contaspagar !== undefined) setContasPagar(cloudData.saas_contaspagar);
+          if (cloudData.saas_contasreceber !== undefined) setContasReceber(cloudData.saas_contasreceber);
+          if (cloudData.saas_valescomissoes !== undefined) setValesComissoes(cloudData.saas_valescomissoes);
+          setDbStatusMsg('Nuvem Sincronizada!');
+        } else {
+          setDbStatusMsg('Usando cache local');
+        }
+      } catch (e) {
+        console.warn('Silent cloud sync failed:', e);
+        setDbStatusMsg('Sem internet, dados salvos localmente');
+      } finally {
+        setIsSyncing(false);
+      }
+    };
+
+    const timer = setTimeout(() => {
+      runCloudSync();
+    }, 800);
+
     // Load custom tenant config if any
     const savedConfig = localStorage.getItem(`saas_tenant_config_${currentTenantId}`);
     if (savedConfig) {
@@ -363,40 +404,14 @@ export default function App() {
         if (parsed.fee !== undefined) setServiceFee(parsed.fee);
       } catch (e) {}
     }
+
+    return () => clearTimeout(timer);
   }, [currentTenantId]);
 
   // --- PERSIST STATES ON ANY CHANGE AND DETECT CURRENT TENANT ---
   const saveState = (key: string, data: any, stateSetter: any) => {
     stateSetter(data);
-    
-    let resolvedKey = key;
-    if (currentTenantId === 'bella') {
-      if (key === 'saas_produtos') resolvedKey = 'saas_bella_produtos';
-      else if (key === 'saas_clientes') resolvedKey = 'saas_bella_clientes';
-      else if (key === 'saas_funcionarios') resolvedKey = 'saas_bella_funcionarios';
-      else if (key === 'saas_fornecedores') resolvedKey = 'saas_bella_fornecedores';
-      else if (key === 'saas_mesas') resolvedKey = 'saas_bella_mesas';
-      else if (key === 'saas_pedidos') resolvedKey = 'saas_bella_pedidos';
-      else if (key === 'saas_caixas') resolvedKey = 'saas_bella_caixas';
-      else if (key === 'saas_movimentacoes') resolvedKey = 'saas_bella_movimentacoes';
-      else if (key === 'saas_contaspagar') resolvedKey = 'saas_bella_contaspagar';
-      else if (key === 'saas_contasreceber') resolvedKey = 'saas_bella_contasreceber';
-      else if (key === 'saas_valescomissoes') resolvedKey = 'saas_bella_valescomissoes';
-    } else if (currentTenantId === 'chef') {
-      if (key === 'saas_produtos') resolvedKey = 'saas_chef_produtos';
-      else if (key === 'saas_clientes') resolvedKey = 'saas_chef_clientes';
-      else if (key === 'saas_funcionarios') resolvedKey = 'saas_chef_funcionarios';
-      else if (key === 'saas_fornecedores') resolvedKey = 'saas_chef_fornecedores';
-      else if (key === 'saas_mesas') resolvedKey = 'saas_chef_mesas';
-      else if (key === 'saas_pedidos') resolvedKey = 'saas_chef_pedidos';
-      else if (key === 'saas_caixas') resolvedKey = 'saas_chef_caixas';
-      else if (key === 'saas_movimentacoes') resolvedKey = 'saas_chef_movimentacoes';
-      else if (key === 'saas_contaspagar') resolvedKey = 'saas_chef_contaspagar';
-      else if (key === 'saas_contasreceber') resolvedKey = 'saas_chef_contasreceber';
-      else if (key === 'saas_valescomissoes') resolvedKey = 'saas_chef_valescomissoes';
-    }
-    
-    saveStorageData(resolvedKey, data);
+    saveCloudState(currentTenantId, key, data);
   };
 
   // Saved Tenant Config automatically on fields change
@@ -1161,9 +1176,9 @@ export default function App() {
   // --- RENDERING CONFIGURATION THEME MAP ---
   const primaryThemeColorClass = {
     indigo: {
-      bg: 'bg-indigo-650 hover:bg-indigo-600',
+      bg: 'bg-indigo-600 hover:bg-indigo-700',
       border: 'border-indigo-200',
-      text: 'text-indigo-650',
+      text: 'text-indigo-600',
       gradient: 'from-indigo-600 to-indigo-850',
       focus: 'focus:ring-indigo-500Border',
       accText: 'text-indigo-700'
@@ -1185,7 +1200,7 @@ export default function App() {
       accText: 'text-rose-700'
     },
     emerald: {
-      bg: 'bg-emerald-650 hover:bg-emerald-600',
+      bg: 'bg-emerald-600 hover:bg-emerald-700',
       border: 'border-emerald-200',
       text: 'text-emerald-700',
       gradient: 'from-emerald-600 to-emerald-800',
@@ -1457,7 +1472,7 @@ export default function App() {
 
                   <button
                     type="submit"
-                    className="w-full py-3 bg-indigo-650 hover:bg-indigo-600 text-white font-black text-xs rounded-xl shadow-lg transition-all uppercase tracking-wider text-center cursor-pointer"
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs rounded-xl shadow-lg transition-all uppercase tracking-wider text-center cursor-pointer"
                   >
                     Cadastrar Empresa & Fazer Login
                   </button>
@@ -1489,6 +1504,7 @@ export default function App() {
                   { id: 'financial', label: 'Financeiro', icon: ArrowUpRight },
                   { id: 'crud', label: 'Cadastros', icon: Users },
                   { id: 'produtos', label: 'Produtos', icon: Package },
+                  { id: 'database', label: 'Nuvem DB', icon: Database },
                 ].map(item => {
                   const Icon = item.icon;
                   const isActive = currentTab === item.id;
@@ -1546,18 +1562,47 @@ export default function App() {
           <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
             
             {/* HEADER */}
-            <header className={`h-16 border-b shrink-0 flex items-center justify-between px-4 md:px-6 z-10 select-none transition-colors duration-200 ${isThemeDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="md:hidden w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-extrabold text-xs">
-                    {currentTenantId === 'admin' ? 'W' : 'P'}
-                  </span>
-                  <h1 className="text-sm md:text-base font-black tracking-tight uppercase">
-                    {currentTenantId === 'admin' ? 'WT SISTEMAS' : tenantName}
-                  </h1>
-                  <span className="hidden lg:inline-block px-1.5 py-0.5 rounded text-[8px] font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
-                    SaaS White-Label
-                  </span>
+            <header className={`min-h-[5.5rem] py-3.5 border-b shrink-0 flex flex-col md:flex-row md:items-center justify-between px-4 md:px-6 z-10 select-none transition-all duration-200 ${isThemeDark ? 'bg-slate-900 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex flex-col items-start">
+                  <div className="flex items-center gap-2">
+                    <span className="md:hidden w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center text-white font-extrabold text-xs">
+                      {currentTenantId === 'admin' ? 'W' : 'P'}
+                    </span>
+                    <h1 className="text-sm md:text-base font-black tracking-tight uppercase">
+                      {currentTenantId === 'admin' ? 'WT SISTEMAS' : tenantName}
+                    </h1>
+                    <span className="hidden lg:inline-block px-1.5 py-0.5 rounded text-[8px] font-black bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase tracking-widest border border-slate-200 dark:border-slate-700">
+                      SaaS White-Label
+                    </span>
+                  </div>
+                  
+                  {/* SECONDARY HORIZONTAL NAVIGATION BAR */}
+                  {currentTenantId !== 'admin' && (
+                    <div className="flex items-center gap-1.5 mt-2 express-nav-bar bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60 shadow-3xs" id="secondary-hdr-nav-rail">
+                      {[
+                        { id: 'clientes', label: 'CLIENTES' },
+                        { id: 'produtos', label: 'PRODUTOS' },
+                        { id: 'financial', label: 'FINANCEIRO' },
+                        { id: 'estoque', label: 'ESTOQUE' },
+                      ].map(tabItem => {
+                        const isActive = currentTab === tabItem.id;
+                        return (
+                          <button
+                            key={tabItem.id}
+                            onClick={() => setCurrentTab(tabItem.id as any)}
+                            className={`px-3 py-1 text-[10px] font-black rounded-md tracking-wider transition-all cursor-pointer ${
+                              isActive
+                                ? 'bg-indigo-600 text-white shadow-xs'
+                                : 'text-slate-600 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-slate-700/55'
+                            }`}
+                          >
+                            {tabItem.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 {/* Active register badge from template */}
@@ -1701,6 +1746,7 @@ export default function App() {
                   pedidos={pedidos}
                   clientes={clientes}
                   produtos={produtos}
+                  funcionarios={funcionarios}
                   onUpdatePedidoStatus={handleUpdatePedidoStatus}
                   onDispatchDelivery={handleDispatchDelivery}
                   caixaDeliveryStatus={caixaDeliveryStatus}
@@ -1741,6 +1787,75 @@ export default function App() {
                   onReceiveContaReceber={handleReceiveContaReceber}
                   onPayValeComissao={handlePayValeComissao}
                   onAddValeComissao={handleAddValeComissao}
+                  onDeleteContaPagar={(id) => {
+                    saveState('saas_contaspagar', contasPagar.filter(cp => cp.id !== id), setContasPagar);
+                  }}
+                  onDeleteContaReceber={(id) => {
+                    saveState('saas_contasreceber', contasReceber.filter(cr => cr.id !== id), setContasReceber);
+                  }}
+                  onDeleteValeComissao={(id) => {
+                    saveState('saas_valescomissoes', valesComissoes.filter(vc => vc.id !== id), setValesComissoes);
+                  }}
+                  onDeleteMovimentacao={(id) => {
+                    saveState('saas_movimentacoes', movimentacoes.filter(m => m.id !== id), setMovimentacoes);
+                  }}
+                  onUpdateContaPagar={(id, update) => {
+                    const updated = contasPagar.map(cp => cp.id === id ? { ...cp, ...update } : cp);
+                    saveState('saas_contaspagar', updated, setContasPagar);
+                  }}
+                  onUpdateValeComissao={(id, update) => {
+                    const updated = valesComissoes.map(vc => vc.id === id ? { ...vc, ...update } : vc);
+                    saveState('saas_valescomissoes', updated, setValesComissoes);
+                  }}
+                  onAddMovimentacao={(m) => {
+                    const newM: MovimentacaoCaixa = { ...m, id: `mov-${Date.now()}`, data: new Date().toISOString() };
+                    saveState('saas_movimentacoes', [newM, ...movimentacoes], setMovimentacoes);
+                  }}
+                  onAddFuncionario={(f) => {
+                    const newF: Funcionario = { ...f, id: `func-${Date.now()}`, data_cadastro: new Date().toISOString() };
+                    saveState('saas_funcionarios', [newF, ...funcionarios], setFuncionarios);
+                  }}
+                  onUpdateFuncionario={(id, fUpdate) => {
+                    const updated = funcionarios.map(f => f.id === id ? { ...f, ...fUpdate } : f);
+                    saveState('saas_funcionarios', updated, setFuncionarios);
+                  }}
+                  onDeleteFuncionario={(id) => {
+                    saveState('saas_funcionarios', funcionarios.filter(f => f.id !== id), setFuncionarios);
+                  }}
+                  onSetValesComissoes={(vcs) => {
+                    saveState('saas_valescomissoes', vcs, setValesComissoes);
+                  }}
+                  tenantId={currentTenantId}
+                />
+              )}
+
+              {currentTab === 'clientes' && (
+                <ClientsManagement
+                  clientes={clientes}
+                  pedidos={pedidos}
+                  produtos={produtos}
+                  onAddCliente={(c) => {
+                    const newC: Cliente = { ...c, id: `c-${Date.now()}`, data_cadastro: new Date().toISOString() };
+                    saveState('saas_clientes', [newC, ...clientes], setClientes);
+                  }}
+                  onUpdateCliente={(id, update) => {
+                    const updated = clientes.map(c => c.id === id ? { ...c, ...update } : c);
+                    saveState('saas_clientes', updated, setClientes);
+                  }}
+                  onDeleteCliente={(id) => {
+                    saveState('saas_clientes', clientes.filter(c => c.id !== id), setClientes);
+                  }}
+                />
+              )}
+
+              {currentTab === 'estoque' && (
+                <StockManagement
+                  produtos={produtos}
+                  pedidos={pedidos}
+                  onUpdateProduto={(id, update) => {
+                    const updated = produtos.map(p => p.id === id ? { ...p, ...update } : p);
+                    saveState('saas_produtos', updated, setProdutos);
+                  }}
                 />
               )}
 
@@ -1820,6 +1935,12 @@ export default function App() {
                     saveState('saas_produtos', produtos.filter(p => p.id !== id), setProdutos);
                   }}
                 />
+              )}
+
+              {currentTab === 'database' && (
+                <div className="max-w-7xl mx-auto space-y-6">
+                  <SupabasePanel currentTenantId={currentTenantId} />
+                </div>
               )}
 
               {currentTab === 'admin_saas' && currentTenantId === 'admin' && (
@@ -2196,7 +2317,7 @@ export default function App() {
             <footer className={`h-10 shrink-0 border-t flex items-center justify-between px-4 md:px-6 text-[10px] font-semibold tracking-wider select-none ${isThemeDark ? 'bg-slate-900 border-slate-800 text-slate-400' : 'bg-white border-slate-200 text-slate-500'}`}>
               <div className="flex gap-6 uppercase">
                 <span className="hidden sm:inline">Vercel Deploy: <strong className="text-emerald-500">OK</strong></span>
-                <span>Supabase Sync: <span className="text-emerald-500 font-bold">● LIVE</span></span>
+                <span>Nuvem Sync: <span className={`${isSyncing ? 'text-amber-500 animate-pulse font-bold' : 'text-emerald-500 font-bold'}`}>● {dbStatusMsg.toUpperCase()}</span></span>
                 <span className="hidden md:inline">ID Loja: #BR-992-SP</span>
               </div>
               <div className="flex gap-4 items-center">
