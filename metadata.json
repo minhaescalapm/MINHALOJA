@@ -1,0 +1,6 @@
+{
+  "name": "PDV Bar e Lanchonete Premium",
+  "description": "Sistema completo de Ponto de Venda (PDV) responsive com controle de caixa, visual de garçom mobile, status de mesas, entregas, fiados em atraso e guia Supabase para SaaS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
